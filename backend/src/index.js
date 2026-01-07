@@ -34,9 +34,6 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 
-// Initialize database
-initDatabase();
-
 // Health check endpoint
 app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -76,12 +73,20 @@ app.use((req, res) => {
 // Create HTTP server
 const server = createServer(app);
 
-// Initialize WebSocket server for multiplayer
-initWebSocket(WS_PORT);
+/**
+ * Start the server after initializing the database.
+ */
+async function startServer() {
+    try {
+        // Initialize database (async for sql.js)
+        await initDatabase();
 
-// Start server
-server.listen(PORT, () => {
-    console.log(`
+        // Initialize WebSocket server for multiplayer
+        initWebSocket(WS_PORT);
+
+        // Start server
+        server.listen(PORT, () => {
+            console.log(`
 ========================================
   GeoElevate Backend Server Started
 ========================================
@@ -89,7 +94,14 @@ server.listen(PORT, () => {
   WebSocket:   ws://localhost:${WS_PORT}
   Environment: ${process.env.NODE_ENV || 'development'}
 ========================================
-    `);
-});
+            `);
+        });
+    } catch (err) {
+        console.error('Failed to start server:', err);
+        process.exit(1);
+    }
+}
+
+startServer();
 
 export default app;

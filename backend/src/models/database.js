@@ -1,4 +1,5 @@
-import Database from 'better-sqlite3';
+import initSqlJs from 'sql.js';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -6,37 +7,176 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 let db = null;
+let dbPath = null;
 
 /**
  * Initialize the SQLite database and create all required tables.
  *
- * @returns {Database} The initialized database instance
+ * @returns {Promise<object>} The initialized database instance
  */
-export function initDatabase() {
-    const dbPath = process.env.DATABASE_PATH || path.join(__dirname, '../../data/geoelevate.db');
-    db = new Database(dbPath);
+export async function initDatabase() {
+    dbPath = process.env.DATABASE_PATH || path.join(__dirname, '../../data/geoelevate.db');
+
+    // Ensure data directory exists
+    const dataDir = path.dirname(dbPath);
+    if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+    }
+
+    const SQL = await initSqlJs();
+
+    // Load existing database or create new one
+    if (fs.existsSync(dbPath)) {
+        const fileBuffer = fs.readFileSync(dbPath);
+        db = new SQL.Database(fileBuffer);
+    } else {
+        db = new SQL.Database();
+    }
 
     // Enable foreign keys
-    db.pragma('foreign_keys = ON');
+    db.run('PRAGMA foreign_keys = ON');
 
     // Create tables
     createTables();
+
+    // Save initial database
+    saveDatabase();
 
     console.log('Database initialized successfully');
     return db;
 }
 
 /**
+ * Save database to file.
+ */
+export function saveDatabase() {
+    if (db && dbPath) {
+        const data = db.export();
+        const buffer = Buffer.from(data);
+        fs.writeFileSync(dbPath, buffer);
+    }
+}
+
+/**
  * Get the database instance.
  *
- * @returns {Database} The database instance
+ * @returns {object} The database instance
  * @throws {Error} If database is not initialized
  */
 export function getDb() {
     if (!db) {
         throw new Error('Database not initialized. Call initDatabase() first.');
     }
-    return db;
+    return createDbWrapper(db);
+}
+
+/**
+ * Create a wrapper around sql.js database to provide better-sqlite3 compatible API.
+ *
+ * @param {object} database - The sql.js database instance
+ * @returns {object} Wrapped database with prepare method
+ */
+function createDbWrapper(database) {
+    return {
+        /**
+         * Prepare a SQL statement.
+         *
+         * @param {string} sql - SQL query string
+         * @returns {object} Statement object with get, all, run methods
+         */
+        prepare(sql) {
+            return {
+                /**
+                 * Execute query and return first row.
+                 *
+                 * @param {...*} params - Query parameters
+                 * @returns {object|undefined} First result row or undefined
+                 */
+                get(...params) {
+                    try {
+                        const stmt = database.prepare(sql);
+                        stmt.bind(params);
+                        if (stmt.step()) {
+                            const columns = stmt.getColumnNames();
+                            const values = stmt.get();
+                            stmt.free();
+                            const row = {};
+                            columns.forEach((col, i) => {
+                                row[col] = values[i];
+                            });
+                            return row;
+                        }
+                        stmt.free();
+                        return undefined;
+                    } catch (err) {
+                        console.error('Database error in get:', err.message, 'SQL:', sql);
+                        throw err;
+                    }
+                },
+
+                /**
+                 * Execute query and return all rows.
+                 *
+                 * @param {...*} params - Query parameters
+                 * @returns {Array<object>} All result rows
+                 */
+                all(...params) {
+                    try {
+                        const stmt = database.prepare(sql);
+                        stmt.bind(params);
+                        const results = [];
+                        const columns = stmt.getColumnNames();
+                        while (stmt.step()) {
+                            const values = stmt.get();
+                            const row = {};
+                            columns.forEach((col, i) => {
+                                row[col] = values[i];
+                            });
+                            results.push(row);
+                        }
+                        stmt.free();
+                        return results;
+                    } catch (err) {
+                        console.error('Database error in all:', err.message, 'SQL:', sql);
+                        throw err;
+                    }
+                },
+
+                /**
+                 * Execute query (INSERT, UPDATE, DELETE).
+                 *
+                 * @param {...*} params - Query parameters
+                 * @returns {object} Result with changes and lastInsertRowid
+                 */
+                run(...params) {
+                    try {
+                        database.run(sql, params);
+                        const changes = database.getRowsModified();
+                        // Get last insert id
+                        const lastIdResult = database.exec('SELECT last_insert_rowid() as id');
+                        const lastInsertRowid = lastIdResult.length > 0
+                            ? lastIdResult[0].values[0][0]
+                            : 0;
+                        saveDatabase();
+                        return { changes, lastInsertRowid };
+                    } catch (err) {
+                        console.error('Database error in run:', err.message, 'SQL:', sql);
+                        throw err;
+                    }
+                }
+            };
+        },
+
+        /**
+         * Execute raw SQL.
+         *
+         * @param {string} sql - SQL to execute
+         */
+        exec(sql) {
+            database.run(sql);
+            saveDatabase();
+        }
+    };
 }
 
 /**
@@ -44,7 +184,7 @@ export function getDb() {
  */
 function createTables() {
     // Users table
-    db.exec(`
+    db.run(`
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             email TEXT UNIQUE,
@@ -66,7 +206,7 @@ function createTables() {
     `);
 
     // User category stats table
-    db.exec(`
+    db.run(`
         CREATE TABLE IF NOT EXISTS user_category_stats (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -86,7 +226,7 @@ function createTables() {
     `);
 
     // User fact progress (for spaced repetition)
-    db.exec(`
+    db.run(`
         CREATE TABLE IF NOT EXISTS user_fact_progress (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -106,7 +246,7 @@ function createTables() {
     `);
 
     // Game sessions table
-    db.exec(`
+    db.run(`
         CREATE TABLE IF NOT EXISTS game_sessions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -127,7 +267,7 @@ function createTables() {
     `);
 
     // Game answers table
-    db.exec(`
+    db.run(`
         CREATE TABLE IF NOT EXISTS game_answers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             session_id INTEGER NOT NULL,
@@ -142,7 +282,7 @@ function createTables() {
     `);
 
     // Multiplayer matches table
-    db.exec(`
+    db.run(`
         CREATE TABLE IF NOT EXISTS multiplayer_matches (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             challenger_id INTEGER NOT NULL,
@@ -162,7 +302,7 @@ function createTables() {
     `);
 
     // Multiplayer answers table
-    db.exec(`
+    db.run(`
         CREATE TABLE IF NOT EXISTS multiplayer_answers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             match_id INTEGER NOT NULL,
@@ -180,7 +320,7 @@ function createTables() {
     `);
 
     // Friendships table
-    db.exec(`
+    db.run(`
         CREATE TABLE IF NOT EXISTS friendships (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -195,7 +335,7 @@ function createTables() {
     `);
 
     // Activity feed table
-    db.exec(`
+    db.run(`
         CREATE TABLE IF NOT EXISTS activity_feed (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -209,7 +349,7 @@ function createTables() {
     `);
 
     // Achievements table
-    db.exec(`
+    db.run(`
         CREATE TABLE IF NOT EXISTS achievements (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
@@ -223,7 +363,7 @@ function createTables() {
     `);
 
     // User achievements table
-    db.exec(`
+    db.run(`
         CREATE TABLE IF NOT EXISTS user_achievements (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -237,7 +377,7 @@ function createTables() {
     `);
 
     // Daily challenges table
-    db.exec(`
+    db.run(`
         CREATE TABLE IF NOT EXISTS daily_challenges (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -253,7 +393,7 @@ function createTables() {
     `);
 
     // Notifications table
-    db.exec(`
+    db.run(`
         CREATE TABLE IF NOT EXISTS notifications (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -268,7 +408,7 @@ function createTables() {
     `);
 
     // Leaderboard snapshots table
-    db.exec(`
+    db.run(`
         CREATE TABLE IF NOT EXISTS leaderboard_snapshots (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             leaderboard_type TEXT NOT NULL,
@@ -284,7 +424,7 @@ function createTables() {
 
     // Geography data tables
     // Countries table
-    db.exec(`
+    db.run(`
         CREATE TABLE IF NOT EXISTS countries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
@@ -297,7 +437,7 @@ function createTables() {
     `);
 
     // Capitals table
-    db.exec(`
+    db.run(`
         CREATE TABLE IF NOT EXISTS capitals (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -307,7 +447,7 @@ function createTables() {
     `);
 
     // Flags table
-    db.exec(`
+    db.run(`
         CREATE TABLE IF NOT EXISTS flags (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             country_id INTEGER NOT NULL UNIQUE,
@@ -317,7 +457,7 @@ function createTables() {
     `);
 
     // Languages table
-    db.exec(`
+    db.run(`
         CREATE TABLE IF NOT EXISTS languages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE
@@ -325,7 +465,7 @@ function createTables() {
     `);
 
     // Country-Languages junction table
-    db.exec(`
+    db.run(`
         CREATE TABLE IF NOT EXISTS country_languages (
             country_id INTEGER NOT NULL,
             language_id INTEGER NOT NULL,
@@ -337,7 +477,7 @@ function createTables() {
     `);
 
     // Trivia facts table
-    db.exec(`
+    db.run(`
         CREATE TABLE IF NOT EXISTS trivia_facts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             category TEXT NOT NULL,
@@ -349,7 +489,7 @@ function createTables() {
     `);
 
     // Refresh tokens table (for JWT refresh token management)
-    db.exec(`
+    db.run(`
         CREATE TABLE IF NOT EXISTS refresh_tokens (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -361,19 +501,17 @@ function createTables() {
     `);
 
     // Create indexes for performance
-    db.exec(`
-        CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-        CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
-        CREATE INDEX IF NOT EXISTS idx_game_sessions_user ON game_sessions(user_id);
-        CREATE INDEX IF NOT EXISTS idx_game_sessions_type ON game_sessions(game_type);
-        CREATE INDEX IF NOT EXISTS idx_friendships_user ON friendships(user_id);
-        CREATE INDEX IF NOT EXISTS idx_friendships_friend ON friendships(friend_id);
-        CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
-        CREATE INDEX IF NOT EXISTS idx_activity_feed_user ON activity_feed(user_id);
-        CREATE INDEX IF NOT EXISTS idx_user_fact_progress_user ON user_fact_progress(user_id);
-        CREATE INDEX IF NOT EXISTS idx_multiplayer_challenger ON multiplayer_matches(challenger_id);
-        CREATE INDEX IF NOT EXISTS idx_multiplayer_opponent ON multiplayer_matches(opponent_id);
-    `);
+    db.run('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)');
+    db.run('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)');
+    db.run('CREATE INDEX IF NOT EXISTS idx_game_sessions_user ON game_sessions(user_id)');
+    db.run('CREATE INDEX IF NOT EXISTS idx_game_sessions_type ON game_sessions(game_type)');
+    db.run('CREATE INDEX IF NOT EXISTS idx_friendships_user ON friendships(user_id)');
+    db.run('CREATE INDEX IF NOT EXISTS idx_friendships_friend ON friendships(friend_id)');
+    db.run('CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id)');
+    db.run('CREATE INDEX IF NOT EXISTS idx_activity_feed_user ON activity_feed(user_id)');
+    db.run('CREATE INDEX IF NOT EXISTS idx_user_fact_progress_user ON user_fact_progress(user_id)');
+    db.run('CREATE INDEX IF NOT EXISTS idx_multiplayer_challenger ON multiplayer_matches(challenger_id)');
+    db.run('CREATE INDEX IF NOT EXISTS idx_multiplayer_opponent ON multiplayer_matches(opponent_id)');
 }
 
-export default { initDatabase, getDb };
+export default { initDatabase, getDb, saveDatabase };

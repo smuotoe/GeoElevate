@@ -1,12 +1,16 @@
 import { NavLink } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
 import './BottomNav.css'
 
 /**
  * Bottom navigation bar component.
+ * Shows different items based on login status.
  *
  * @returns {React.ReactElement} Navigation component
  */
 function BottomNav() {
+    const { user } = useAuth()
+
     return (
         <nav className="bottom-nav">
             <NavLink to="/" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
@@ -21,14 +25,23 @@ function BottomNav() {
                 <span className="nav-icon">&#127918;</span>
                 <span className="nav-label">Games</span>
             </NavLink>
-            <NavLink to="/notifications" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                <span className="nav-icon">&#128276;</span>
-                <span className="nav-label">Notifications</span>
-            </NavLink>
-            <NavLink to="/profile" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                <span className="nav-icon">&#128100;</span>
-                <span className="nav-label">Me</span>
-            </NavLink>
+            {user ? (
+                <>
+                    <NavLink to="/notifications" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                        <span className="nav-icon">&#128276;</span>
+                        <span className="nav-label">Alerts</span>
+                    </NavLink>
+                    <NavLink to="/profile" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                        <span className="nav-icon">&#128100;</span>
+                        <span className="nav-label">Me</span>
+                    </NavLink>
+                </>
+            ) : (
+                <NavLink to="/login" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                    <span className="nav-icon">&#128274;</span>
+                    <span className="nav-label">Log In</span>
+                </NavLink>
+            )}
         </nav>
     )
 }

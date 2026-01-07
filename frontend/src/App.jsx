@@ -13,6 +13,7 @@ import Profile from './pages/Profile'
 import Friends from './pages/Friends'
 import Settings from './pages/Settings'
 import Achievements from './pages/Achievements'
+import Multiplayer from './pages/Multiplayer'
 import NotFound from './pages/NotFound'
 
 // Components
@@ -21,6 +22,11 @@ import ProtectedRoute from './components/ProtectedRoute'
 
 import './styles/App.css'
 
+/**
+ * Main App component with routing.
+ *
+ * @returns {React.ReactElement} The app component
+ */
 function App() {
     const { user, loading } = useAuth()
 
@@ -37,36 +43,30 @@ function App() {
         <div className="app">
             <main className="main-content">
                 <Routes>
-                    {/* Public routes */}
+                    {/* Public auth routes */}
                     <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
                     <Route path="/register" element={user ? <Navigate to="/" /> : <Register />} />
 
-                    {/* Protected routes */}
-                    <Route path="/" element={
+                    {/* Guest-accessible routes (no login required) */}
+                    <Route path="/" element={<Today />} />
+                    <Route path="/games" element={<Games />} />
+                    <Route path="/games/:gameType" element={<Games />} />
+                    <Route path="/play/:gameType" element={<GamePlay />} />
+                    <Route path="/leaderboards" element={<Leaderboards />} />
+
+                    {/* Multiplayer - requires login */}
+                    <Route path="/multiplayer" element={
                         <ProtectedRoute>
-                            <Today />
+                            <Multiplayer />
                         </ProtectedRoute>
                     } />
-                    <Route path="/games" element={
+                    <Route path="/multiplayer/lobby/:matchId" element={
                         <ProtectedRoute>
-                            <Games />
+                            <Multiplayer />
                         </ProtectedRoute>
                     } />
-                    <Route path="/games/:gameType" element={
-                        <ProtectedRoute>
-                            <Games />
-                        </ProtectedRoute>
-                    } />
-                    <Route path="/play/:gameType" element={
-                        <ProtectedRoute>
-                            <GamePlay />
-                        </ProtectedRoute>
-                    } />
-                    <Route path="/leaderboards" element={
-                        <ProtectedRoute>
-                            <Leaderboards />
-                        </ProtectedRoute>
-                    } />
+
+                    {/* User-only routes (require login) */}
                     <Route path="/notifications" element={
                         <ProtectedRoute>
                             <Notifications />
@@ -103,7 +103,7 @@ function App() {
                 </Routes>
             </main>
 
-            {user && <BottomNav />}
+            <BottomNav />
         </div>
     )
 }
