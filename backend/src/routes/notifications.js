@@ -7,10 +7,15 @@ const router = Router();
 /**
  * Get user's notifications.
  * GET /api/notifications
+ * Query params:
+ *   - limit: max results (default 50)
+ *   - offset: pagination offset (default 0)
+ *   - unreadOnly: filter unread only (default false)
+ *   - sortOrder: 'asc' or 'desc' (default 'desc' - newest first)
  */
 router.get('/', authenticate, (req, res, next) => {
     try {
-        const { limit = 50, offset = 0, unreadOnly = false } = req.query;
+        const { limit = 50, offset = 0, unreadOnly = false, sortOrder = 'desc' } = req.query;
         const db = getDb();
 
         let query = `
@@ -23,7 +28,9 @@ router.get('/', authenticate, (req, res, next) => {
             query += ' AND is_read = 0';
         }
 
-        query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+        // Validate sortOrder to prevent SQL injection
+        const order = sortOrder === 'asc' ? 'ASC' : 'DESC';
+        query += ` ORDER BY created_at ${order} LIMIT ? OFFSET ?`;
         params.push(parseInt(limit), parseInt(offset));
 
         const notifications = db.prepare(query).all(...params);
@@ -32,12 +39,18 @@ router.get('/', authenticate, (req, res, next) => {
             'SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0'
         ).get(req.userId);
 
+        const total = db.prepare(
+            'SELECT COUNT(*) as count FROM notifications WHERE user_id = ?'
+        ).get(req.userId);
+
         res.json({
             notifications: notifications.map(n => ({
                 ...n,
                 data: JSON.parse(n.data_json || '{}')
             })),
-            unreadCount: unreadCount.count
+            unreadCount: unreadCount.count,
+            total: total.count,
+            sortOrder: order.toLowerCase()
         });
     } catch (err) {
         next(err);

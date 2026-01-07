@@ -1,5 +1,7 @@
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import api from '../utils/api'
 
 /**
  * Today/Home screen component.
@@ -8,6 +10,73 @@ import { useAuth } from '../context/AuthContext'
  */
 function Today() {
     const { user } = useAuth()
+    const [challenges, setChallenges] = useState([])
+    const [loadingChallenges, setLoadingChallenges] = useState(false)
+
+    useEffect(() => {
+        if (user) {
+            fetchChallenges()
+        }
+    }, [user])
+
+    /**
+     * Fetch daily challenges from API.
+     * Sends client timezone for correct "today" calculation.
+     */
+    async function fetchChallenges() {
+        setLoadingChallenges(true)
+        try {
+            const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+            const data = await api.get(`/daily/challenges?timezone=${encodeURIComponent(timezone)}`)
+            setChallenges(data.challenges || [])
+        } catch (err) {
+            console.error('Failed to fetch challenges:', err)
+            setChallenges([])
+        } finally {
+            setLoadingChallenges(false)
+        }
+    }
+
+    /**
+     * Get display name for challenge type.
+     *
+     * @param {string} type - Challenge type
+     * @returns {string} Display name
+     */
+    function getChallengeDisplayName(type) {
+        const names = {
+            play_games: 'Play Games',
+            correct_answers: 'Get Correct Answers',
+            perfect_game: 'Perfect Game',
+            flags_practice: 'Practice Flags',
+            capitals_practice: 'Practice Capitals',
+            maps_practice: 'Practice Maps',
+            languages_practice: 'Practice Languages',
+            trivia_practice: 'Practice Trivia'
+        }
+        return names[type] || type.replace(/_/g, ' ')
+    }
+
+    /**
+     * Get description for challenge type.
+     *
+     * @param {string} type - Challenge type
+     * @param {number} target - Target value
+     * @returns {string} Description
+     */
+    function getChallengeDescription(type, target) {
+        const descriptions = {
+            play_games: `Complete ${target} games today`,
+            correct_answers: `Answer ${target} questions correctly`,
+            perfect_game: `Score 100% on ${target} game`,
+            flags_practice: `Play ${target} flags games`,
+            capitals_practice: `Play ${target} capitals games`,
+            maps_practice: `Play ${target} maps games`,
+            languages_practice: `Play ${target} language games`,
+            trivia_practice: `Play ${target} trivia games`
+        }
+        return descriptions[type] || `Complete ${target} ${type.replace(/_/g, ' ')}`
+    }
 
     return (
         <div className="page">
@@ -67,9 +136,63 @@ function Today() {
                 <>
                     <section className="mb-md">
                         <h3 className="mb-sm">Daily Challenges</h3>
-                        <div className="card">
-                            <p className="text-secondary">Your daily challenges will appear here.</p>
-                        </div>
+                        {loadingChallenges ? (
+                            <div className="card">
+                                <p className="text-secondary">Loading challenges...</p>
+                            </div>
+                        ) : challenges.length > 0 ? (
+                            <div className="challenges-list">
+                                {challenges.map(challenge => (
+                                    <div
+                                        key={challenge.id}
+                                        className={`card challenge-card ${challenge.is_completed ? 'challenge-completed' : ''}`}
+                                        style={{ marginBottom: '8px' }}
+                                    >
+                                        <div className="challenge-header">
+                                            <span className="challenge-name">
+                                                {getChallengeDisplayName(challenge.challenge_type)}
+                                            </span>
+                                            <span className="challenge-reward">
+                                                +{challenge.xp_reward} XP
+                                            </span>
+                                        </div>
+                                        <p className="challenge-description text-secondary" style={{ fontSize: '0.85rem', margin: '4px 0' }}>
+                                            {getChallengeDescription(challenge.challenge_type, challenge.target_value)}
+                                        </p>
+                                        <div className="challenge-progress-container" style={{ marginTop: '8px' }}>
+                                            <div className="progress-bar" style={{
+                                                backgroundColor: 'var(--surface-light)',
+                                                borderRadius: '4px',
+                                                height: '8px',
+                                                overflow: 'hidden'
+                                            }}>
+                                                <div
+                                                    className="progress-fill"
+                                                    style={{
+                                                        width: `${Math.min(100, (challenge.current_value / challenge.target_value) * 100)}%`,
+                                                        backgroundColor: challenge.is_completed ? 'var(--success)' : 'var(--primary)',
+                                                        height: '100%',
+                                                        transition: 'width 0.3s ease'
+                                                    }}
+                                                />
+                                            </div>
+                                            <span className="challenge-progress-text" style={{
+                                                fontSize: '0.8rem',
+                                                color: challenge.is_completed ? 'var(--success)' : 'var(--text-secondary)',
+                                                marginTop: '4px',
+                                                display: 'block'
+                                            }}>
+                                                {challenge.is_completed ? 'Completed!' : `${challenge.current_value}/${challenge.target_value}`}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="card">
+                                <p className="text-secondary">No challenges available today.</p>
+                            </div>
+                        )}
                     </section>
 
                     <section className="mb-md">

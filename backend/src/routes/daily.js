@@ -5,13 +5,40 @@ import { authenticate } from '../middleware/auth.js';
 const router = Router();
 
 /**
+ * Calculate "today" date string based on client timezone.
+ *
+ * @param {string} timezone - IANA timezone string (e.g., 'America/New_York')
+ * @returns {string} Date string in YYYY-MM-DD format for client's local date
+ */
+function getTodayForTimezone(timezone) {
+    try {
+        const now = new Date();
+        // Use Intl.DateTimeFormat to get the date in the client's timezone
+        const formatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone: timezone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
+        // en-CA format gives us YYYY-MM-DD
+        return formatter.format(now);
+    } catch {
+        // Fallback to UTC if timezone is invalid
+        return new Date().toISOString().split('T')[0];
+    }
+}
+
+/**
  * Get today's daily challenges.
  * GET /api/daily/challenges
+ * Query params:
+ *   - timezone: IANA timezone string (optional, defaults to UTC)
  */
 router.get('/challenges', authenticate, (req, res, next) => {
     try {
         const db = getDb();
-        const today = new Date().toISOString().split('T')[0];
+        const timezone = req.query.timezone || 'UTC';
+        const today = getTodayForTimezone(timezone);
 
         // Get or create daily challenges
         let challenges = db.prepare(`
@@ -24,27 +51,51 @@ router.get('/challenges', authenticate, (req, res, next) => {
             challenges = generateDailyChallenges(db, req.userId, today);
         }
 
-        res.json({ challenges, date: today });
+        res.json({ challenges, date: today, timezone });
     } catch (err) {
         next(err);
     }
 });
 
 /**
+ * Calculate "yesterday" date string based on client timezone.
+ *
+ * @param {string} timezone - IANA timezone string (e.g., 'America/New_York')
+ * @returns {string} Date string in YYYY-MM-DD format for yesterday in client's timezone
+ */
+function getYesterdayForTimezone(timezone) {
+    try {
+        const yesterday = new Date(Date.now() - 86400000);
+        const formatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone: timezone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
+        return formatter.format(yesterday);
+    } catch {
+        return new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    }
+}
+
+/**
  * Get user's streak info.
  * GET /api/daily/streak
+ * Query params:
+ *   - timezone: IANA timezone string (optional, defaults to UTC)
  */
 router.get('/streak', authenticate, (req, res, next) => {
     try {
         const db = getDb();
+        const timezone = req.query.timezone || 'UTC';
 
         const user = db.prepare(`
             SELECT current_streak, longest_streak, last_played_date
             FROM users WHERE id = ?
         `).get(req.userId);
 
-        const today = new Date().toISOString().split('T')[0];
-        const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+        const today = getTodayForTimezone(timezone);
+        const yesterday = getYesterdayForTimezone(timezone);
 
         // Check if streak is still active
         const streakActive = user.last_played_date === today || user.last_played_date === yesterday;
@@ -53,7 +104,9 @@ router.get('/streak', authenticate, (req, res, next) => {
             currentStreak: streakActive ? user.current_streak : 0,
             longestStreak: user.longest_streak,
             lastPlayedDate: user.last_played_date,
-            streakActive
+            streakActive,
+            today,
+            timezone
         });
     } catch (err) {
         next(err);
