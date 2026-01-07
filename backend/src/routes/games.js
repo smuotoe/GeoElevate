@@ -49,6 +49,79 @@ router.get('/types', (req, res) => {
 
     res.json({ gameTypes });
 });
+/**
+ * Debug endpoint to check user streak data.
+ * GET /api/games/debug-user/:id
+ */
+router.get('/debug-user/:id', (req, res) => {
+    const db = getDb();
+    const user = db.prepare(
+        'SELECT id, username, last_played_date, current_streak, longest_streak, overall_xp FROM users WHERE id = ?'
+    ).get(req.params.id);
+
+    const today = new Date().toISOString().split('T')[0];
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+
+    res.json({
+        user,
+        today,
+        yesterday,
+        comparison: {
+            lastPlayedEqualsYesterday: user?.last_played_date === yesterday,
+            lastPlayedEqualsToday: user?.last_played_date === today,
+            lastPlayedNotToday: user?.last_played_date !== today
+        }
+    });
+});
+
+/**
+ * Fix user streak if played today but streak is 0.
+ * POST /api/games/fix-streak/:id
+ */
+router.post('/fix-streak/:id', (req, res) => {
+    const db = getDb();
+    const today = new Date().toISOString().split('T')[0];
+
+    // Get user before fix
+    const before = db.prepare(
+        'SELECT id, username, last_played_date, current_streak FROM users WHERE id = ?'
+    ).get(req.params.id);
+
+    // If played today and streak is 0, set to 1
+    if (before && before.last_played_date === today && before.current_streak === 0) {
+        db.prepare('UPDATE users SET current_streak = 1 WHERE id = ?').run(req.params.id);
+    }
+
+    // Get user after fix
+    const after = db.prepare(
+        'SELECT id, username, last_played_date, current_streak FROM users WHERE id = ?'
+    ).get(req.params.id);
+
+    res.json({ before, after, today });
+});
+
+/**
+ * Get available regions/continents for filtering.
+ * GET /api/games/regions
+ */
+router.get('/regions', (req, res) => {
+    try {
+        const db = getDb();
+        const regions = db.prepare(
+            'SELECT DISTINCT continent FROM countries WHERE continent IS NOT NULL ORDER BY continent'
+        ).all();
+
+        res.json({
+            regions: regions.map(r => ({
+                id: r.continent.toLowerCase().replace(/\s+/g, '-'),
+                name: r.continent
+            }))
+        });
+    } catch (err) {
+        console.error('Error fetching regions:', err);
+        res.status(500).json({ error: { message: 'Failed to fetch regions' } });
+    }
+});
 
 /**
  * Get questions for a game.
@@ -132,8 +205,13 @@ router.post('/sessions', authenticate, (req, res) => {
 /**
  * Update/complete a game session.
  * PATCH /api/games/sessions/:id
+ *
+ * Uses a database transaction to ensure all-or-nothing data integrity.
+ * If the user refreshes during save, either all data is saved or none.
  */
 router.patch('/sessions/:id', authenticate, (req, res, next) => {
+    const db = getDb();
+
     try {
         const { id } = req.params;
         const { answers, score, xpEarned, correctCount: rawCorrectCount, averageTimeMs } = req.body;
@@ -142,9 +220,7 @@ router.patch('/sessions/:id', authenticate, (req, res, next) => {
         const correctCount = rawCorrectCount ?? (answers ? answers.filter(a => a.isCorrect).length : 0);
         console.log('PATCH session - rawCorrectCount:', rawCorrectCount, 'calculatedCorrectCount:', correctCount);
 
-        const db = getDb();
-
-        // Verify session belongs to user
+        // Verify session belongs to user (before transaction)
         const session = db.prepare(
             'SELECT * FROM game_sessions WHERE id = ? AND user_id = ?'
         ).get(id, req.userId);
@@ -155,40 +231,53 @@ router.patch('/sessions/:id', authenticate, (req, res, next) => {
             });
         }
 
-        // Update session
-        db.prepare(`
-            UPDATE game_sessions
-            SET score = ?, xp_earned = ?, correct_count = ?, average_time_ms = ?,
-                completed_at = CURRENT_TIMESTAMP, total_questions = ?
-            WHERE id = ?
-        `).run(score, xpEarned, correctCount, averageTimeMs, answers?.length || 10, id);
+        // Begin transaction for atomic game completion
+        // All changes will be committed together or rolled back on error
+        db.beginTransaction();
 
-        // Save answers
-        if (answers && Array.isArray(answers)) {
-            const insertAnswer = db.prepare(`
-                INSERT INTO game_answers (session_id, question_index, question_data_json,
-                    user_answer, correct_answer, is_correct, time_ms)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            `);
+        try {
+            // Update session
+            db.prepare(`
+                UPDATE game_sessions
+                SET score = ?, xp_earned = ?, correct_count = ?, average_time_ms = ?,
+                    completed_at = CURRENT_TIMESTAMP, total_questions = ?
+                WHERE id = ?
+            `).run(score, xpEarned, correctCount, averageTimeMs, answers?.length || 10, id);
 
-            for (let i = 0; i < answers.length; i++) {
-                const answer = answers[i];
-                insertAnswer.run(
-                    id, i,
-                    JSON.stringify(answer.question),
-                    answer.userAnswer,
-                    answer.correctAnswer,
-                    answer.isCorrect ? 1 : 0,
-                    answer.timeMs
-                );
+            // Save answers
+            if (answers && Array.isArray(answers)) {
+                const insertAnswer = db.prepare(`
+                    INSERT INTO game_answers (session_id, question_index, question_data_json,
+                        user_answer, correct_answer, is_correct, time_ms)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                `);
+
+                for (let i = 0; i < answers.length; i++) {
+                    const answer = answers[i];
+                    insertAnswer.run(
+                        id, i,
+                        JSON.stringify(answer.question),
+                        answer.userAnswer,
+                        answer.correctAnswer,
+                        answer.isCorrect ? 1 : 0,
+                        answer.timeMs
+                    );
+                }
             }
+
+            // Update user stats
+            console.log('Updating stats - gameType:', session.game_type, 'correctCount:', correctCount, 'totalQuestions:', answers?.length || 10);
+            updateUserStats(db, req.userId, session.game_type, score, xpEarned, correctCount, answers?.length || 10);
+
+            // Commit transaction - all changes saved atomically
+            db.commit();
+
+            res.json({ message: 'Game session completed', sessionId: id });
+        } catch (txErr) {
+            // Rollback on any error - no partial data saved
+            db.rollback();
+            throw txErr;
         }
-
-        // Update user stats
-        console.log('Updating stats - gameType:', session.game_type, 'correctCount:', correctCount, 'totalQuestions:', answers?.length || 10);
-        updateUserStats(db, req.userId, session.game_type, score, xpEarned, correctCount, answers?.length || 10);
-
-        res.json({ message: 'Game session completed', sessionId: id });
     } catch (err) {
         next(err);
     }
@@ -451,6 +540,14 @@ function updateUserStats(db, userId, gameType, score, xpEarned, correctCount, to
         WHERE user_id = ? AND category = ?
     `).run(xpEarned, correctCount, totalQuestions, score, score, userId, gameType);
 
+    // Get user's last played date BEFORE updating (for streak calculation)
+    const user = db.prepare(
+        'SELECT last_played_date, current_streak FROM users WHERE id = ?'
+    ).get(userId);
+
+    const today = new Date().toISOString().split('T')[0];
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+
     // Update overall user stats
     db.prepare(`
         UPDATE users
@@ -461,15 +558,9 @@ function updateUserStats(db, userId, gameType, score, xpEarned, correctCount, to
         WHERE id = ?
     `).run(xpEarned, xpEarned, userId);
 
-    // Update streak
-    const user = db.prepare(
-        'SELECT last_played_date, current_streak FROM users WHERE id = ?'
-    ).get(userId);
-
-    const today = new Date().toISOString().split('T')[0];
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-
+    // Update streak based on the PREVIOUS last_played_date
     if (user.last_played_date === yesterday) {
+        // Played yesterday, increment streak
         db.prepare(`
             UPDATE users
             SET current_streak = current_streak + 1,
@@ -481,14 +572,26 @@ function updateUserStats(db, userId, gameType, score, xpEarned, correctCount, to
             WHERE id = ?
         `).run(userId);
     } else if (user.last_played_date !== today) {
+        // Didn't play yesterday or today, start new streak
+        db.prepare('UPDATE users SET current_streak = 1 WHERE id = ?').run(userId);
+    } else if (user.last_played_date === today && user.current_streak === 0) {
+        // Fix for users who played today but have streak = 0 (legacy bug)
         db.prepare('UPDATE users SET current_streak = 1 WHERE id = ?').run(userId);
     }
+    // If already played today with streak > 0, don't change streak
 
     // Update achievement progress
     try {
         updateAchievementProgress(db, userId, gameType, correctCount, totalQuestions, score);
     } catch (achErr) {
         console.error('ERROR in updateAchievementProgress:', achErr);
+    }
+
+    // Update daily challenge progress
+    try {
+        updateDailyChallengeProgress(db, userId, gameType, correctCount, totalQuestions);
+    } catch (challengeErr) {
+        console.error('ERROR in updateDailyChallengeProgress:', challengeErr);
     }
 }
 
@@ -617,6 +720,96 @@ function updateAchievementProgress(db, userId, gameType, correctCount, totalQues
                     newProgress,
                     unlocked ? new Date().toISOString() : null
                 );
+            }
+        }
+    }
+}
+
+/**
+ * Update daily challenge progress after game completion.
+ *
+ * @param {object} db - Database instance
+ * @param {number} userId - User ID
+ * @param {string} gameType - Type of game played
+ * @param {number} correctCount - Number of correct answers
+ * @param {number} totalQuestions - Total questions
+ */
+function updateDailyChallengeProgress(db, userId, gameType, correctCount, totalQuestions) {
+    const today = new Date().toISOString().split('T')[0];
+
+    // Get today's challenges for this user
+    const challenges = db.prepare(`
+        SELECT * FROM daily_challenges
+        WHERE user_id = ? AND date = ? AND is_completed = 0
+    `).all(userId, today);
+
+    console.log('Found', challenges.length, 'incomplete challenges for user', userId);
+
+    for (const challenge of challenges) {
+        let increment = 0;
+
+        switch (challenge.challenge_type) {
+            case 'play_games':
+                // Completing any game counts
+                increment = 1;
+                break;
+            case 'correct_answers':
+                // Add correct answers from this game
+                increment = correctCount;
+                break;
+            case 'perfect_game':
+                // Check if this was a perfect game
+                if (correctCount === totalQuestions && totalQuestions > 0) {
+                    increment = 1;
+                }
+                break;
+            case 'flags_practice':
+                if (gameType === 'flags') increment = 1;
+                break;
+            case 'capitals_practice':
+                if (gameType === 'capitals') increment = 1;
+                break;
+            case 'maps_practice':
+                if (gameType === 'maps') increment = 1;
+                break;
+            case 'languages_practice':
+                if (gameType === 'languages') increment = 1;
+                break;
+            case 'trivia_practice':
+                if (gameType === 'trivia') increment = 1;
+                break;
+        }
+
+        if (increment > 0) {
+            const newValue = Math.min(
+                challenge.current_value + increment,
+                challenge.target_value
+            );
+            const isCompleted = newValue >= challenge.target_value;
+
+            console.log(`Challenge ${challenge.challenge_type}: ${challenge.current_value} + ${increment} = ${newValue} (completed: ${isCompleted})`);
+
+            db.prepare(`
+                UPDATE daily_challenges
+                SET current_value = ?, is_completed = ?
+                WHERE id = ?
+            `).run(newValue, isCompleted ? 1 : 0, challenge.id);
+
+            // Award XP if completed
+            if (isCompleted) {
+                db.prepare(`
+                    UPDATE users
+                    SET overall_xp = overall_xp + ?
+                    WHERE id = ?
+                `).run(challenge.xp_reward, userId);
+
+                console.log(`Awarded ${challenge.xp_reward} XP for completing challenge`);
+
+                // Create notification
+                db.prepare(`
+                    INSERT INTO notifications (user_id, type, title, body)
+                    VALUES (?, 'challenge_complete', 'Challenge Complete!', ?)
+                `).run(userId, `You earned ${challenge.xp_reward} XP for completing "${challenge.challenge_type}"!`);
             }
         }
     }

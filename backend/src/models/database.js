@@ -16,6 +16,8 @@ let dbPath = null;
  */
 export async function initDatabase() {
     dbPath = process.env.DATABASE_PATH || path.join(__dirname, '../../data/geoelevate.db');
+    console.log('Database path:', dbPath);
+    console.log('DATABASE_PATH env:', process.env.DATABASE_PATH);
 
     // Ensure data directory exists
     const dataDir = path.dirname(dbPath);
@@ -71,6 +73,24 @@ export function getDb() {
 }
 
 /**
+ * Reload the database from disk.
+ *
+ * @returns {Promise<void>}
+ */
+export async function reloadDatabase() {
+    if (dbPath && fs.existsSync(dbPath)) {
+        const SQL = await initSqlJs();
+        const fileBuffer = fs.readFileSync(dbPath);
+        db = new SQL.Database(fileBuffer);
+        db.run('PRAGMA foreign_keys = ON');
+        console.log('Database reloaded from disk');
+    }
+}
+
+// Track if we're in a transaction (don't save until commit)
+let inTransaction = false;
+
+/**
  * Create a wrapper around sql.js database to provide better-sqlite3 compatible API.
  *
  * @param {object} database - The sql.js database instance
@@ -78,6 +98,62 @@ export function getDb() {
  */
 function createDbWrapper(database) {
     return {
+        /**
+         * Begin a database transaction.
+         * All changes will be batched until commit or rollback.
+         */
+        beginTransaction() {
+            if (inTransaction) {
+                throw new Error('Transaction already in progress');
+            }
+            database.run('BEGIN TRANSACTION');
+            inTransaction = true;
+        },
+
+        /**
+         * Commit the current transaction and save to disk.
+         */
+        commit() {
+            if (!inTransaction) {
+                throw new Error('No transaction in progress');
+            }
+            database.run('COMMIT');
+            inTransaction = false;
+            saveDatabase();
+        },
+
+        /**
+         * Rollback the current transaction, discarding all changes.
+         */
+        rollback() {
+            if (!inTransaction) {
+                throw new Error('No transaction in progress');
+            }
+            database.run('ROLLBACK');
+            inTransaction = false;
+        },
+
+        /**
+         * Execute a function within a transaction.
+         * Automatically commits on success, rolls back on error.
+         *
+         * @param {Function} fn - Function to execute within transaction
+         * @returns {*} Result of the function
+         */
+        transaction(fn) {
+            return (...args) => {
+                this.beginTransaction();
+                try {
+                    const result = fn(...args);
+                    this.commit();
+                    return result;
+                } catch (err) {
+                    this.rollback();
+                    throw err;
+                }
+            };
+        },
+
         /**
          * Prepare a SQL statement.
          *
@@ -157,7 +233,10 @@ function createDbWrapper(database) {
                         const lastInsertRowid = lastIdResult.length > 0
                             ? lastIdResult[0].values[0][0]
                             : 0;
-                        saveDatabase();
+                        // Only save to disk if not in a transaction
+                        if (!inTransaction) {
+                            saveDatabase();
+                        }
                         return { changes, lastInsertRowid };
                     } catch (err) {
                         console.error('Database error in run:', err.message, 'SQL:', sql);
@@ -174,7 +253,10 @@ function createDbWrapper(database) {
          */
         exec(sql) {
             database.run(sql);
-            saveDatabase();
+            // Only save to disk if not in a transaction
+            if (!inTransaction) {
+                saveDatabase();
+            }
         }
     };
 }
@@ -514,4 +596,4 @@ function createTables() {
     db.run('CREATE INDEX IF NOT EXISTS idx_multiplayer_opponent ON multiplayer_matches(opponent_id)');
 }
 
-export default { initDatabase, getDb, saveDatabase };
+export default { initDatabase, getDb, saveDatabase, reloadDatabase };
