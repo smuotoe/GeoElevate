@@ -242,6 +242,122 @@ router.get('/:id/game-history', authenticate, (req, res, next) => {
 });
 
 /**
+ * Export all user data.
+ * GET /api/users/:id/export
+ * Returns a JSON file with all user data for GDPR compliance.
+ */
+router.get('/:id/export', authenticate, (req, res, next) => {
+    try {
+        const { id } = req.params;
+
+        // Can only export own data
+        if (parseInt(id) !== req.userId) {
+            return res.status(403).json({
+                error: { message: 'Cannot export another user\'s data' }
+            });
+        }
+
+        const db = getDb();
+
+        // Get user profile
+        const user = db.prepare(`
+            SELECT id, username, avatar_url, overall_xp, overall_level,
+                   current_streak, longest_streak, created_at, updated_at
+            FROM users WHERE id = ?
+        `).get(id);
+
+        if (!user) {
+            return res.status(404).json({
+                error: { message: 'User not found' }
+            });
+        }
+
+        // Get category stats
+        const stats = db.prepare(`
+            SELECT category, xp, level, games_played, total_correct, total_questions,
+                   high_score, average_time_ms
+            FROM user_category_stats WHERE user_id = ?
+        `).all(id);
+
+        // Get achievements
+        const achievements = db.prepare(`
+            SELECT a.id, a.name, a.description, a.icon, a.xp_reward,
+                   ua.progress, ua.unlocked_at
+            FROM achievements a
+            LEFT JOIN user_achievements ua ON ua.achievement_id = a.id AND ua.user_id = ?
+            WHERE ua.user_id IS NOT NULL
+        `).all(id);
+
+        // Get game history
+        const games = db.prepare(`
+            SELECT id, game_type, game_mode, score, xp_earned, correct_count,
+                   total_questions, average_time_ms, started_at, completed_at,
+                   difficulty_level, region_filter
+            FROM game_sessions
+            WHERE user_id = ?
+            ORDER BY started_at DESC
+        `).all(id);
+
+        // Get friends - use two separate queries to avoid complex JOIN issues with SQL.js
+        const userId = parseInt(id);
+        const friendsAsUser = db.prepare(`
+            SELECT u.id, u.username, u.overall_level, f.created_at as friends_since
+            FROM friendships f
+            JOIN users u ON u.id = f.friend_id
+            WHERE f.user_id = ? AND f.status = 'accepted'
+        `).all(userId);
+
+        const friendsAsFriend = db.prepare(`
+            SELECT u.id, u.username, u.overall_level, f.created_at as friends_since
+            FROM friendships f
+            JOIN users u ON u.id = f.user_id
+            WHERE f.friend_id = ? AND f.status = 'accepted'
+        `).all(userId);
+
+        // Combine and dedupe friends
+        const friendsMap = new Map();
+        [...friendsAsUser, ...friendsAsFriend].forEach(friend => {
+            friendsMap.set(friend.id, friend);
+        });
+        const friends = Array.from(friendsMap.values());
+
+        // Get notifications
+        const notifications = db.prepare(`
+            SELECT id, type, title, body, is_read, created_at
+            FROM notifications
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+        `).all(id);
+
+        // Get daily challenge progress
+        const dailyChallenges = db.prepare(`
+            SELECT id, challenge_type, target_value, current_value,
+                   is_completed, xp_reward, date
+            FROM daily_challenges
+            WHERE user_id = ?
+            ORDER BY date DESC
+        `).all(id);
+
+        const exportData = {
+            exportedAt: new Date().toISOString(),
+            profile: user,
+            categoryStats: stats,
+            achievements,
+            gameHistory: games,
+            friends,
+            notifications,
+            dailyChallenges
+        };
+
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Disposition', `attachment; filename="geoelevate-export-${user.username}-${Date.now()}.json"`);
+        res.json(exportData);
+    } catch (err) {
+        next(err);
+    }
+});
+
+/**
  * Upload user avatar.
  * POST /api/users/:id/avatar
  * Expects multipart/form-data with 'avatar' field
