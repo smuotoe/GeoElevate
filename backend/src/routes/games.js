@@ -454,14 +454,32 @@ function generateMapQuestions(db, mode, region, count, difficulty) {
 
     const countries = db.prepare(query).all(...params);
 
-    return countries.map(country => ({
-        type: 'maps',
-        mode,
-        prompt: mode === 'click-on-country' ? country.name : country.code,
-        correctAnswer: country.code,
-        countryId: country.id,
-        countryName: country.name
-    }));
+    // Get all countries for wrong answers
+    const allCountries = db.prepare('SELECT id, name, code FROM countries').all();
+
+    return countries.map(country => {
+        // Generate wrong answers from other countries
+        const wrongAnswers = allCountries
+            .filter(c => c.id !== country.id)
+            .sort(() => Math.random() - 0.5)
+            .slice(0, 3);
+
+        // For identify-highlighted mode: show code, user picks country name
+        // For click-on-country mode: show country name, user clicks on map (no options needed)
+        const options = [...wrongAnswers, country]
+            .sort(() => Math.random() - 0.5)
+            .map(c => c.name);
+
+        return {
+            type: 'maps',
+            mode,
+            prompt: mode === 'click-on-country' ? country.name : country.code,
+            correctAnswer: mode === 'click-on-country' ? country.code : country.name,
+            options,
+            countryId: country.id,
+            countryName: country.name
+        };
+    });
 }
 
 /**
@@ -475,8 +493,101 @@ function generateMapQuestions(db, mode, region, count, difficulty) {
  * @returns {Array} Array of questions
  */
 function generateLanguageQuestions(db, mode, region, count, difficulty) {
-    // Simplified implementation - to be expanded
-    return [];
+    // Get all languages for generating wrong answers
+    const allLanguages = db.prepare('SELECT id, name FROM languages').all();
+
+    if (mode === 'language-to-countries') {
+        // Show a language, user picks which country speaks it
+        let query = `
+            SELECT DISTINCT l.id as lang_id, l.name as language,
+                   c.id as country_id, c.name as country, c.continent
+            FROM languages l
+            JOIN country_languages cl ON l.id = cl.language_id
+            JOIN countries c ON cl.country_id = c.id
+        `;
+        const params = [];
+
+        if (region) {
+            query += ' WHERE c.continent = ?';
+            params.push(region);
+        }
+
+        query += ' ORDER BY RANDOM() LIMIT ?';
+        params.push(count);
+
+        const data = db.prepare(query).all(...params);
+
+        // Get all countries for wrong answers
+        const allCountries = db.prepare('SELECT id, name FROM countries').all();
+
+        return data.map(item => {
+            const wrongAnswers = allCountries
+                .filter(c => c.id !== item.country_id)
+                .sort(() => Math.random() - 0.5)
+                .slice(0, 3)
+                .map(c => c.name);
+
+            const options = [...wrongAnswers, item.country]
+                .sort(() => Math.random() - 0.5);
+
+            return {
+                type: 'languages',
+                mode,
+                prompt: `Which country speaks ${item.language}?`,
+                correctAnswer: item.country,
+                options,
+                languageId: item.lang_id,
+                countryId: item.country_id
+            };
+        });
+    } else {
+        // Default: country-to-languages - Show country, user picks the language
+        let query = `
+            SELECT c.id as country_id, c.name as country, c.continent,
+                   GROUP_CONCAT(l.name) as languages,
+                   (SELECT l2.name FROM languages l2
+                    JOIN country_languages cl2 ON l2.id = cl2.language_id
+                    WHERE cl2.country_id = c.id
+                    ORDER BY RANDOM() LIMIT 1) as primary_language
+            FROM countries c
+            JOIN country_languages cl ON c.id = cl.country_id
+            JOIN languages l ON cl.language_id = l.id
+        `;
+        const params = [];
+
+        if (region) {
+            query += ' WHERE c.continent = ?';
+            params.push(region);
+        }
+
+        query += ' GROUP BY c.id ORDER BY RANDOM() LIMIT ?';
+        params.push(count);
+
+        const data = db.prepare(query).all(...params);
+
+        return data.map(item => {
+            // Get wrong language answers
+            const countryLangs = item.languages.split(',');
+            const wrongAnswers = allLanguages
+                .filter(l => !countryLangs.includes(l.name))
+                .sort(() => Math.random() - 0.5)
+                .slice(0, 3)
+                .map(l => l.name);
+
+            const options = [...wrongAnswers, item.primary_language]
+                .sort(() => Math.random() - 0.5);
+
+            return {
+                type: 'languages',
+                mode,
+                prompt: `What language is spoken in ${item.country}?`,
+                correctAnswer: item.primary_language,
+                options,
+                countryId: item.country_id,
+                allLanguages: countryLangs
+            };
+        });
+    }
 }
 
 /**
@@ -508,12 +619,28 @@ function generateTriviaQuestions(db, region, count, difficulty) {
 
     const facts = db.prepare(query).all(...params);
 
-    return facts.map(fact => ({
-        type: 'trivia',
-        prompt: fact.question,
-        correctAnswer: fact.answer,
-        category: fact.category
-    }));
+    // Get all trivia facts for generating wrong answers
+    const allFacts = db.prepare('SELECT DISTINCT answer FROM trivia_facts').all();
+
+    return facts.map(fact => {
+        // Generate wrong answers from other trivia answers
+        const wrongAnswers = allFacts
+            .filter(f => f.answer !== fact.answer)
+            .sort(() => Math.random() - 0.5)
+            .slice(0, 3)
+            .map(f => f.answer);
+
+        const options = [...wrongAnswers, fact.answer]
+            .sort(() => Math.random() - 0.5);
+
+        return {
+            type: 'trivia',
+            prompt: fact.question,
+            correctAnswer: fact.answer,
+            options,
+            category: fact.category
+        };
+    });
 }
 
 /**

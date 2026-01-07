@@ -1,5 +1,153 @@
 # GeoElevate - Progress Report
 
+## Session 17 Progress
+- **Date**: January 7, 2026
+- **Status**: 176/302 features passing (58.3%)
+- **Focus**: Trivia game, Language modes, Regional filtering
+
+### Features Completed This Session
+
+#### Feature #213: Language to countries mode works
+- **Description**: Verify reverse languages game
+- **Verification**:
+  - Step 1: Started Languages game at /play/languages
+  - Step 2: Selected "Language to Country" mode
+  - Step 3: Questions showed language names (e.g., "Which country speaks Polish?")
+  - Step 4: Country names displayed as options
+  - Step 5: Completed game with 1580 points, 8/10 correct
+- **Result**: Language to Countries mode working correctly
+
+#### Feature #214: Trivia varied question formats
+- **Description**: Verify trivia game variety
+- **Implementation**:
+  - Created `seed-trivia.js` with 48 trivia facts across categories:
+    - Population, Landmarks, Currency, Geography, Borders, Continents, Islands, Climate, History
+  - Fixed `generateTriviaQuestions` to include multiple choice options
+- **Verification**:
+  - Started Trivia game
+  - Saw varied question categories:
+    - Currency: "What is the official currency of Brazil?" (Real)
+    - Population: "Which African country has the largest population?" (Nigeria)
+    - Geography: "Which is the smallest country by area?" (Vatican City)
+    - Borders: "Which two countries share the longest international border?" (US/Canada)
+    - Islands: "Which is the largest island in the world?" (Greenland)
+  - Game completed successfully
+- **Result**: Trivia game working with varied question formats
+
+#### Feature #215: Regional filter Europe works
+- **Description**: Verify Europe region filtering
+- **Verification**:
+  - Step 1: Started Flags game at /play/flags
+  - Step 2: Selected "Europe" from Filter by Region dropdown
+  - Step 3: Played through questions
+  - Step 4: All flags shown were European countries:
+    - United Kingdom, Spain, France, Switzerland, Germany, Austria, Netherlands, etc.
+- **Result**: Europe regional filter working correctly
+
+### Code Changes This Session
+
+#### Backend
+- `backend/seed-trivia.js` (NEW): Seed script with 48 trivia facts
+- `backend/src/routes/games.js`:
+  - Fixed `generateTriviaQuestions` to generate multiple choice options
+  - Wrong answers pulled from other trivia answers randomly
+
+#### Frontend
+- `frontend/vite.config.js`:
+  - Fixed proxy to point to port 5002 (was 5003)
+
+### What the Next Agent Should Do
+
+1. **Get next feature** - Use `feature_get_next` to continue implementation
+2. **Run regression tests** - Verify existing features still work
+3. **Continue with remaining regional filter and game features**
+
+### Technical Notes
+
+- **Test user**: test@example.com / password123 / testuser
+- **Frontend**: http://localhost:5173
+- **Backend**: http://localhost:5002
+- **Trivia facts**: 48 facts seeded across 9 categories
+
+---
+
+## Session 16 Progress
+- **Date**: January 7, 2026
+- **Status**: 170/302 features passing (56.3%)
+- **Focus**: Game direction modes (Flag/Country, Country/Capital)
+
+### Features Completed This Session
+
+#### Feature #205: Share results creates shareable content
+- **Description**: Verify share functionality
+- **Verification**:
+  - Step 1: Completed a Flags game (820 points)
+  - Step 2: Clicked Share button on results screen
+  - Step 3: Share dialog opened with title "Share Your Results"
+  - Step 4: Generated shareable text: "I just scored 820 points in Flags on GeoElevate! 5/8 correct (63% accuracy). Can you beat my score?"
+  - Also tested: Copy to Clipboard shows "Copied!" alert
+- **Result**: Share functionality working correctly
+
+#### Feature #206: Flag to country mode works
+- **Description**: Verify flags game variant
+- **Implementation**:
+  - Added `questionMode` state to GamePlay.jsx
+  - Added "Question Direction" UI section for flags/capitals games
+  - Pass `mode` parameter to API for question generation
+- **Verification**:
+  - Step 1: Started Flags game at /play/flags
+  - Step 2: "Flag to Country" mode selected by default
+  - Step 3: Flag images displayed as question prompts
+  - Step 4: Country names displayed as text options
+  - Step 5: Game completed successfully
+- **Result**: Flag to Country mode working
+
+#### Feature #207: Country to flag mode works
+- **Description**: Verify reverse flags game
+- **Verification**:
+  - Step 1: Started Flags game
+  - Step 2: Selected "Country to Flag" button
+  - Step 3: Country names displayed as headings (Nigeria, Canada, Thailand, Germany)
+  - Step 4: Flag images displayed as answer options
+  - Step 5: Game completed with 190 points
+- **Result**: Country to Flag mode working
+
+#### Feature #208: Country to capital mode works
+- **Description**: Verify capitals game variant
+- **Verification**:
+  - Step 1: Started Capitals game at /play/capitals
+  - Step 2: "Country to Capital" mode selected by default
+  - Step 3: Country names displayed (Thailand, South Africa, Belgium)
+  - Step 4: Capital names displayed as options (Bangkok, Pretoria, Brussels)
+  - Step 5: Game completed with 370 points
+- **Result**: Country to Capital mode working
+
+### Code Changes This Session
+
+#### Frontend
+- `frontend/src/pages/GamePlay.jsx`:
+  - Added `questionMode` state for game direction tracking
+  - Added useEffect to set default mode based on gameType
+  - Added `modeParam` to API call for question generation
+  - Added "Question Direction" UI section with toggle buttons
+  - Flags: "Flag to Country" / "Country to Flag" options
+  - Capitals: "Country to Capital" / "Capital to Country" options
+
+### What the Next Agent Should Do
+
+1. **Get next feature** - Use `feature_get_next` (likely Feature #209: Capital to Country mode)
+2. **Run regression tests** - Verify existing features still work
+3. **Continue with remaining game mode features**
+
+### Technical Notes
+
+- **Test user**: test@example.com / password123 / testuser
+- **Frontend**: http://localhost:5173
+- **Backend**: http://localhost:5003
+- **Question Direction defaults**: flag-to-country, country-to-capital
+
+---
+
 ## Session 15 Progress
 - **Date**: January 7, 2026
 - **Status**: 156/302 features passing (51.7%)
