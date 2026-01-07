@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useState, useEffect, useRef } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 const GAME_TYPES = [
@@ -12,13 +12,34 @@ const GAME_TYPES = [
 
 /**
  * Games list page component.
+ * Supports deep linking via /games/:gameType route parameter.
  *
  * @returns {React.ReactElement} Games page
  */
 function Games() {
     const { user } = useAuth()
     const navigate = useNavigate()
+    const { gameType } = useParams()
     const [showLoginPrompt, setShowLoginPrompt] = useState(false)
+    const cardRef = useRef(null)
+
+    // Find the selected game if gameType is provided
+    const selectedGame = gameType
+        ? GAME_TYPES.find(game => game.id === gameType)
+        : null
+
+    // Filter games to show - only selected game if gameType provided, otherwise all
+    const gamesToShow = selectedGame ? [selectedGame] : GAME_TYPES
+
+    // Determine page title
+    const pageTitle = selectedGame ? `${selectedGame.name} Game` : 'Games'
+
+    // Scroll to and highlight the card when a specific game type is selected
+    useEffect(() => {
+        if (selectedGame && cardRef.current) {
+            cardRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+    }, [selectedGame])
 
     /**
      * Handle multiplayer button click.
@@ -35,7 +56,12 @@ function Games() {
     return (
         <div className="page">
             <div className="page-header">
-                <h1 className="page-title">Games</h1>
+                <h1 className="page-title">{pageTitle}</h1>
+                {selectedGame && (
+                    <Link to="/games" className="btn btn-secondary" style={{ marginLeft: 'auto' }}>
+                        View All Games
+                    </Link>
+                )}
             </div>
 
             {/* Login Prompt Modal for Guests */}
@@ -74,12 +100,20 @@ function Games() {
             <section className="mb-lg">
                 <h2 className="section-title mb-md">Solo Games</h2>
                 <div className="game-categories">
-                    {GAME_TYPES.map(game => (
+                    {gamesToShow.map(game => (
                         <Link
                             key={game.id}
+                            ref={selectedGame && game.id === selectedGame.id ? cardRef : null}
                             to={`/play/${game.id}`}
-                            className="card game-card mb-md"
-                            style={{ display: 'block', textDecoration: 'none' }}
+                            className={`card game-card mb-md${selectedGame ? ' highlighted' : ''}`}
+                            style={{
+                                display: 'block',
+                                textDecoration: 'none',
+                                ...(selectedGame && {
+                                    border: '2px solid var(--primary)',
+                                    boxShadow: '0 0 12px var(--primary-light, rgba(99, 102, 241, 0.3))'
+                                })
+                            }}
                         >
                             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                                 <span
@@ -97,34 +131,36 @@ function Games() {
                 </div>
             </section>
 
-            {/* Multiplayer Section */}
-            <section className="mb-lg">
-                <h2 className="section-title mb-md">Multiplayer</h2>
-                <button
-                    onClick={handleMultiplayerClick}
-                    className="card game-card multiplayer-card"
-                    style={{ display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer' }}
-                >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                        <span className="game-icon" style={{ fontSize: '32px' }}>
-                            &#9876;
-                        </span>
-                        <div>
-                            <h3 style={{ color: 'var(--text-primary)' }}>Challenge Friends</h3>
-                            <p className="text-secondary">
-                                {user
-                                    ? 'Compete against your friends in real-time!'
-                                    : 'Login to challenge your friends'}
-                            </p>
-                        </div>
-                        {!user && (
-                            <span className="badge badge-warning" style={{ marginLeft: 'auto' }}>
-                                Login Required
+            {/* Multiplayer Section - hidden when viewing specific game type */}
+            {!selectedGame && (
+                <section className="mb-lg">
+                    <h2 className="section-title mb-md">Multiplayer</h2>
+                    <button
+                        onClick={handleMultiplayerClick}
+                        className="card game-card multiplayer-card"
+                        style={{ display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer' }}
+                    >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                            <span className="game-icon" style={{ fontSize: '32px' }}>
+                                &#9876;
                             </span>
-                        )}
-                    </div>
-                </button>
-            </section>
+                            <div>
+                                <h3 style={{ color: 'var(--text-primary)' }}>Challenge Friends</h3>
+                                <p className="text-secondary">
+                                    {user
+                                        ? 'Compete against your friends in real-time!'
+                                        : 'Login to challenge your friends'}
+                                </p>
+                            </div>
+                            {!user && (
+                                <span className="badge badge-warning" style={{ marginLeft: 'auto' }}>
+                                    Login Required
+                                </span>
+                            )}
+                        </div>
+                    </button>
+                </section>
+            )}
         </div>
     )
 }
