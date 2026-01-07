@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
@@ -14,6 +14,7 @@ function Register() {
     const [confirmPassword, setConfirmPassword] = useState('')
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
+    const isSubmittingRef = useRef(false)
 
     const { register } = useAuth()
     const navigate = useNavigate()
@@ -27,8 +28,39 @@ function Register() {
         e.preventDefault()
         setError('')
 
+        // Trim whitespace from inputs
+        const trimmedEmail = email.trim()
+        const trimmedUsername = username.trim()
+        const trimmedPassword = password.trim()
+
+        // Validate whitespace-only inputs
+        if (!trimmedEmail) {
+            setError('Email is required')
+            return
+        }
+
+        if (!trimmedUsername) {
+            setError('Username is required')
+            return
+        }
+
+        if (!trimmedPassword) {
+            setError('Password is required')
+            return
+        }
+
         if (password !== confirmPassword) {
             setError('Passwords do not match')
+            return
+        }
+
+        if (trimmedUsername.length < 3) {
+            setError('Username must be at least 3 characters')
+            return
+        }
+
+        if (trimmedUsername.length > 20) {
+            setError('Username must be at most 20 characters')
             return
         }
 
@@ -42,14 +74,19 @@ function Register() {
             return
         }
 
+        // Prevent double submission using ref for immediate check
+        if (isSubmittingRef.current) return
+        isSubmittingRef.current = true
+
         setLoading(true)
 
-        const result = await register(email, username, password)
+        const result = await register(trimmedEmail, trimmedUsername, password)
 
         if (result.success) {
             navigate('/', { replace: true })
         } else {
             setError(result.error || 'Registration failed')
+            isSubmittingRef.current = false
         }
 
         setLoading(false)
@@ -68,7 +105,7 @@ function Register() {
                             type="email"
                             id="email"
                             value={email}
-                            onChange={(e) => setEmail(e.target.value)}
+                            onChange={(e) => { setEmail(e.target.value); setError(''); }}
                             placeholder="Enter your email"
                             required
                             autoComplete="email"
@@ -81,10 +118,12 @@ function Register() {
                             type="text"
                             id="username"
                             value={username}
-                            onChange={(e) => setUsername(e.target.value)}
+                            onChange={(e) => { setUsername(e.target.value); setError(''); }}
                             placeholder="Choose a username"
                             required
                             autoComplete="username"
+                            minLength={3}
+                            maxLength={20}
                         />
                     </div>
 
@@ -94,7 +133,7 @@ function Register() {
                             type="password"
                             id="password"
                             value={password}
-                            onChange={(e) => setPassword(e.target.value)}
+                            onChange={(e) => { setPassword(e.target.value); setError(''); }}
                             placeholder="Create a password"
                             required
                             autoComplete="new-password"
@@ -107,7 +146,7 @@ function Register() {
                             type="password"
                             id="confirmPassword"
                             value={confirmPassword}
-                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            onChange={(e) => { setConfirmPassword(e.target.value); setError(''); }}
                             placeholder="Confirm your password"
                             required
                             autoComplete="new-password"

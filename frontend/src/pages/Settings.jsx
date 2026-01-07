@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
@@ -34,6 +34,17 @@ function Settings() {
         'You have unsaved changes in the password form. Are you sure you want to leave?'
     )
 
+    // Auto-dismiss success toast after 3 seconds
+    useEffect(() => {
+        if (passwordSuccess) {
+            const timer = setTimeout(() => {
+                setPasswordSuccess('')
+            }, 3000)
+            return () => clearTimeout(timer)
+        }
+    }, [passwordSuccess])
+
+
     /**
      * Handle logout.
      */
@@ -52,13 +63,16 @@ function Settings() {
         setPasswordError('')
         setPasswordSuccess('')
 
-        // Client-side validation
-        if (!currentPassword) {
+        // Client-side validation - trim whitespace
+        const trimmedCurrentPassword = currentPassword.trim()
+        const trimmedNewPassword = newPassword.trim()
+
+        if (!trimmedCurrentPassword) {
             setPasswordError('Current password is required')
             return
         }
 
-        if (!newPassword) {
+        if (!trimmedNewPassword) {
             setPasswordError('New password is required')
             return
         }
@@ -106,7 +120,8 @@ function Settings() {
         e.preventDefault()
         setDeleteError('')
 
-        if (!deletePassword) {
+        const trimmedDeletePassword = deletePassword.trim()
+        if (!trimmedDeletePassword) {
             setDeleteError('Password is required to confirm deletion')
             return
         }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
@@ -12,6 +12,7 @@ function Login() {
     const [password, setPassword] = useState('')
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
+    const isSubmittingRef = useRef(false)
 
     const { login } = useAuth()
     const navigate = useNavigate()
@@ -27,14 +28,35 @@ function Login() {
     async function handleSubmit(e) {
         e.preventDefault()
         setError('')
+
+        // Trim whitespace from inputs
+        const trimmedEmail = email.trim()
+        const trimmedPassword = password.trim()
+
+        // Validate whitespace-only inputs
+        if (!trimmedEmail) {
+            setError('Email is required')
+            return
+        }
+
+        if (!trimmedPassword) {
+            setError('Password is required')
+            return
+        }
+
+        // Prevent double submission using ref for immediate check
+        if (isSubmittingRef.current) return
+        isSubmittingRef.current = true
+
         setLoading(true)
 
-        const result = await login(email, password)
+        const result = await login(trimmedEmail, password)
 
         if (result.success) {
             navigate(from, { replace: true })
         } else {
             setError(result.error || 'Login failed')
+            isSubmittingRef.current = false
         }
 
         setLoading(false)
@@ -53,7 +75,7 @@ function Login() {
                             type="email"
                             id="email"
                             value={email}
-                            onChange={(e) => setEmail(e.target.value)}
+                            onChange={(e) => { setEmail(e.target.value); setError(''); }}
                             placeholder="Enter your email"
                             required
                             autoComplete="email"
@@ -66,7 +88,7 @@ function Login() {
                             type="password"
                             id="password"
                             value={password}
-                            onChange={(e) => setPassword(e.target.value)}
+                            onChange={(e) => { setPassword(e.target.value); setError(''); }}
                             placeholder="Enter your password"
                             required
                             autoComplete="current-password"
