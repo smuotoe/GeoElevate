@@ -12,10 +12,11 @@ const router = Router();
  *   - offset: pagination offset (default 0)
  *   - unreadOnly: filter unread only (default false)
  *   - sortOrder: 'asc' or 'desc' (default 'desc' - newest first)
+ *   - type: filter by notification type (optional)
  */
 router.get('/', authenticate, (req, res, next) => {
     try {
-        const { limit = 50, offset = 0, unreadOnly = false, sortOrder = 'desc' } = req.query;
+        const { limit = 50, offset = 0, unreadOnly = false, sortOrder = 'desc', type } = req.query;
         const db = getDb();
 
         let query = `
@@ -26,6 +27,12 @@ router.get('/', authenticate, (req, res, next) => {
 
         if (unreadOnly === 'true') {
             query += ' AND is_read = 0';
+        }
+
+        // Filter by type if provided
+        if (type && type !== 'all') {
+            query += ' AND type = ?';
+            params.push(type);
         }
 
         // Validate sortOrder to prevent SQL injection
@@ -52,6 +59,68 @@ router.get('/', authenticate, (req, res, next) => {
             total: total.count,
             sortOrder: order.toLowerCase()
         });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/**
+ * Export filtered notifications.
+ * GET /api/notifications/export
+ * Query params:
+ *   - type: filter by notification type (optional)
+ *   - unreadOnly: filter unread only (default false)
+ *   - sortOrder: 'asc' or 'desc' (default 'desc' - newest first)
+ * Returns JSON file with filtered notifications.
+ */
+router.get('/export', authenticate, (req, res, next) => {
+    try {
+        const { unreadOnly = false, sortOrder = 'desc', type } = req.query;
+        const db = getDb();
+
+        let query = `
+            SELECT id, type, title, body, is_read, created_at FROM notifications
+            WHERE user_id = ?
+        `;
+        const params = [req.userId];
+
+        if (unreadOnly === 'true') {
+            query += ' AND is_read = 0';
+        }
+
+        // Filter by type if provided
+        if (type && type !== 'all') {
+            query += ' AND type = ?';
+            params.push(type);
+        }
+
+        // Validate sortOrder to prevent SQL injection
+        const order = sortOrder === 'asc' ? 'ASC' : 'DESC';
+        query += ` ORDER BY created_at ${order}`;
+
+        const notifications = db.prepare(query).all(...params);
+
+        const exportData = {
+            exportedAt: new Date().toISOString(),
+            filters: {
+                type: type || 'all',
+                unreadOnly: unreadOnly === 'true',
+                sortOrder: order.toLowerCase()
+            },
+            totalCount: notifications.length,
+            notifications: notifications.map(n => ({
+                id: n.id,
+                type: n.type,
+                title: n.title,
+                body: n.body,
+                isRead: n.is_read === 1,
+                createdAt: n.created_at
+            }))
+        };
+
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Disposition', `attachment; filename="notifications-export-${Date.now()}.json"`);
+        res.json(exportData);
     } catch (err) {
         next(err);
     }

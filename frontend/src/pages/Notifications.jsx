@@ -3,6 +3,20 @@ import { useAuth } from '../context/AuthContext'
 import api from '../utils/api'
 
 /**
+ * Available notification types for filtering.
+ */
+const NOTIFICATION_TYPES = [
+    { value: 'all', label: 'All Types' },
+    { value: 'challenge_complete', label: 'Challenges' },
+    { value: 'friend_accepted', label: 'Friend Accepted' },
+    { value: 'friend_request', label: 'Friend Requests' },
+    { value: 'match_invite', label: 'Match Invites' },
+    { value: 'achievement', label: 'Achievements' },
+    { value: 'streak_reminder', label: 'Streak Reminders' },
+    { value: 'friend_activity', label: 'Friend Activity' }
+]
+
+/**
  * Format a date for display.
  *
  * @param {string} dateString - ISO date string
@@ -51,6 +65,8 @@ function Notifications() {
     const [error, setError] = useState(null)
     const [sortOrder, setSortOrder] = useState('desc')
     const [unreadCount, setUnreadCount] = useState(0)
+    const [typeFilter, setTypeFilter] = useState('all')
+    const [exporting, setExporting] = useState(false)
 
     useEffect(() => {
         let ignore = false
@@ -60,7 +76,11 @@ function Notifications() {
             setLoading(true)
             setError(null)
             try {
-                const data = await api.get(`/notifications?sortOrder=${sortOrder}`)
+                const params = new URLSearchParams({
+                    sortOrder,
+                    ...(typeFilter !== 'all' && { type: typeFilter })
+                })
+                const data = await api.get(`/notifications?${params}`)
                 if (!ignore) {
                     setNotifications(data.notifications || [])
                     setUnreadCount(data.unreadCount || 0)
@@ -82,7 +102,7 @@ function Notifications() {
         return () => {
             ignore = true
         }
-    }, [user, sortOrder])
+    }, [user, sortOrder, typeFilter])
 
     /**
      * Toggle sort order between ascending and descending.
@@ -135,6 +155,47 @@ function Notifications() {
         }
     }
 
+    /**
+     * Export filtered notifications as JSON file.
+     */
+    const handleExportFiltered = async () => {
+        setExporting(true)
+        setError(null)
+        try {
+            const params = new URLSearchParams({
+                sortOrder,
+                ...(typeFilter !== 'all' && { type: typeFilter })
+            })
+            const token = localStorage.getItem('accessToken')
+            const response = await fetch(`/api/notifications/export?${params}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+
+            if (!response.ok) {
+                const data = await response.json()
+                throw new Error(data.error?.message || 'Export failed')
+            }
+
+            const data = await response.json()
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `notifications-export-${typeFilter}-${Date.now()}.json`
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+            URL.revokeObjectURL(url)
+        } catch (err) {
+            setError(err.message)
+            setTimeout(() => setError(null), 3000)
+        } finally {
+            setExporting(false)
+        }
+    }
+
     if (!user) {
         return (
             <div className="page">
@@ -170,27 +231,68 @@ function Notifications() {
 
             <div className="card mb-md" style={{
                 display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
+                flexDirection: 'column',
+                gap: '12px',
                 padding: '12px 16px'
             }}>
-                <button
-                    className="btn btn-secondary"
-                    onClick={toggleSortOrder}
-                    style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-                >
-                    Sort by Date: {sortOrder === 'desc' ? 'Newest First' : 'Oldest First'}
-                    <span style={{ fontSize: '1.2rem' }}>
-                        {sortOrder === 'desc' ? '\u2193' : '\u2191'}
-                    </span>
-                </button>
-                {unreadCount > 0 && (
-                    <button
-                        className="btn btn-primary"
-                        onClick={markAllAsRead}
-                    >
-                        Mark All Read
-                    </button>
+                <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: '8px'
+                }}>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <select
+                            value={typeFilter}
+                            onChange={(e) => setTypeFilter(e.target.value)}
+                            className="btn btn-secondary"
+                            aria-label="Filter by type"
+                            style={{ minWidth: '140px' }}
+                        >
+                            {NOTIFICATION_TYPES.map(type => (
+                                <option key={type.value} value={type.value}>
+                                    {type.label}
+                                </option>
+                            ))}
+                        </select>
+                        <button
+                            className="btn btn-secondary"
+                            onClick={toggleSortOrder}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                        >
+                            {sortOrder === 'desc' ? 'Newest' : 'Oldest'}
+                            <span style={{ fontSize: '1.2rem' }}>
+                                {sortOrder === 'desc' ? '\u2193' : '\u2191'}
+                            </span>
+                        </button>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        {unreadCount > 0 && (
+                            <button
+                                className="btn btn-primary"
+                                onClick={markAllAsRead}
+                            >
+                                Mark All Read
+                            </button>
+                        )}
+                        <button
+                            className="btn btn-secondary"
+                            onClick={handleExportFiltered}
+                            disabled={exporting || notifications.length === 0}
+                            title="Export filtered notifications as JSON"
+                        >
+                            {exporting ? 'Exporting...' : 'Export'}
+                        </button>
+                    </div>
+                </div>
+                {typeFilter !== 'all' && (
+                    <div style={{
+                        fontSize: '0.875rem',
+                        color: 'var(--text-secondary)'
+                    }}>
+                        Showing {notifications.length} {NOTIFICATION_TYPES.find(t => t.value === typeFilter)?.label || typeFilter} notification{notifications.length !== 1 ? 's' : ''}
+                    </div>
                 )}
             </div>
 
