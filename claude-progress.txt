@@ -1,5 +1,93 @@
 # GeoElevate - Progress Report
 
+## Session 11 Progress
+- **Date**: January 7, 2026
+- **Status**: 146/302 features passing (48.3%)
+- **Focus**: Timezone support, date sorting, concurrent edit handling
+
+### Features Completed This Session
+
+#### Feature #182: Daily filters work with timezone
+- **Description**: Verify daily boundaries timezone-aware
+- **Implementation**:
+  - Added `getTodayForTimezone()` and `getYesterdayForTimezone()` helper functions
+  - Backend accepts `timezone` query param (IANA format like 'America/New_York')
+  - Uses `Intl.DateTimeFormat` for accurate timezone conversion
+  - Frontend sends client timezone via `Intl.DateTimeFormat().resolvedOptions().timeZone`
+- **Verification**:
+  - America/Halifax: Jan 7 (correct - afternoon)
+  - UTC: Jan 7 (correct - 5 PM)
+  - Asia/Tokyo: Jan 8 (correct - past midnight)
+  - Pacific/Auckland: Jan 8 (correct - early morning)
+- **Result**: Daily challenges correctly reset at midnight in user's local timezone
+
+#### Feature #183: Date sorting works correctly
+- **Description**: Verify date sorting accuracy
+- **Implementation**:
+  - Added `sortOrder` param to /api/notifications (asc/desc)
+  - Implemented full Notifications page with date display
+  - Sort toggle button switches between "Newest First" and "Oldest First"
+- **Verification**:
+  - Descending: 10:14 AM -> 05:30 AM (newest first)
+  - Ascending: 05:30 AM -> 10:14 AM (oldest first)
+  - Toggle correctly reverses order
+- **Result**: Date sorting works correctly in both directions
+
+#### Feature #184: Two users edit same record handling
+- **Description**: Verify concurrent edit handling
+- **Implementation**:
+  - Added optimistic concurrency control via `expected_updated_at` field
+  - PATCH /api/users/:id checks timestamp before updating
+  - PATCH /api/settings checks timestamp before updating
+  - Returns 409 Conflict with error message if record was modified
+  - Added `updated_at` to GET /api/users/:id response
+- **Verification**:
+  - User A saves: 200 OK (success)
+  - User B saves with stale timestamp: 409 Conflict
+  - Error: "This record has been modified by another user. Please refresh and try again."
+- **Result**: Concurrent edits properly detected and rejected
+
+### Code Changes This Session
+
+#### Backend
+- `backend/src/routes/daily.js`:
+  - Added `getTodayForTimezone()` function using `Intl.DateTimeFormat`
+  - Added `getYesterdayForTimezone()` function
+  - Added timezone query param to /api/daily/challenges and /api/daily/streak
+- `backend/src/routes/notifications.js`:
+  - Added `sortOrder` param (asc/desc) to GET /api/notifications
+  - Added `total` count to response
+- `backend/src/routes/users.js`:
+  - Added `expected_updated_at` concurrency control to PATCH
+  - Added `updated_at` to GET response
+- `backend/src/routes/settings.js`:
+  - Added `expected_updated_at` concurrency control to PATCH
+
+#### Frontend
+- `frontend/src/pages/Today.jsx`:
+  - Send client timezone with daily challenges request
+- `frontend/src/pages/Notifications.jsx`:
+  - Complete rewrite with date display and sort toggle
+  - Shows formatted dates, notification icons, unread count
+  - Mark as read functionality
+- `frontend/vite.config.js`:
+  - Updated proxy to port 5003
+
+### What the Next Agent Should Do
+
+1. **Get next feature** - Use `feature_get_next` to continue implementation
+2. **Run regression tests** - Verify existing features still work
+3. **Note**: Backend running on port 5003, vite proxy updated
+
+### Technical Notes
+
+- **Test user**: test@example.com / password123 / testuser
+- **Frontend**: http://localhost:5173
+- **Backend**: http://localhost:5003 (updated from 5002)
+- **Concurrency control**: Uses `expected_updated_at` timestamp for optimistic locking
+
+---
+
 ## Session 10 Progress
 - **Date**: January 7, 2026
 - **Status**: 138/302 features passing (45.7%)
