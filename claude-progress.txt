@@ -2,8 +2,8 @@
 
 ## Session 8 Progress
 - **Date**: January 7, 2026
-- **Status**: 99/302 features passing (32.8%)
-- **Focus**: Database transaction support for data integrity
+- **Status**: 100/302 features passing (33.1%) - MILESTONE!
+- **Focus**: Database transaction support, form state management, delete cascades
 
 ### Features Completed This Session
 
@@ -29,6 +29,14 @@
   - Password Change form: `disabled={loading}`, shows "Changing..."
   - All forms use `isSubmittingRef` for double-submission prevention
 - **Tested**: Login and password change operations work correctly
+
+#### Feature #129: Delete item updates statistics
+- **Description**: Verify statistics cascade update when deleting items
+- **Verification**:
+  - Friends page showed "My Friends (3)" with 3 friends listed
+  - Clicked "Remove" on newfriend123, confirmed deletion
+  - Page immediately updated to "My Friends (2)" with 2 friends listed
+- **Result**: Statistics update correctly when items are deleted
 
 ### Code Changes This Session
 
