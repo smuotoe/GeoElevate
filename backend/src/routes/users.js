@@ -27,7 +27,7 @@ router.get('/:id', authenticate, (req, res, next) => {
 
         const user = db.prepare(`
             SELECT id, username, avatar_url, overall_xp, overall_level,
-                   current_streak, longest_streak, created_at
+                   current_streak, longest_streak, created_at, updated_at
             FROM users WHERE id = ?
         `).get(id);
 
@@ -46,6 +46,10 @@ router.get('/:id', authenticate, (req, res, next) => {
 /**
  * Update user.
  * PATCH /api/users/:id
+ *
+ * Supports optimistic concurrency control via `expected_updated_at` field.
+ * If provided, the update will only succeed if the record hasn't been
+ * modified since that timestamp.
  */
 router.patch('/:id', authenticate, (req, res, next) => {
     try {
@@ -58,8 +62,25 @@ router.patch('/:id', authenticate, (req, res, next) => {
             });
         }
 
-        const { username, avatar_url } = req.body;
+        const { username, avatar_url, expected_updated_at } = req.body;
         const db = getDb();
+
+        // Check for concurrent modification if expected_updated_at is provided
+        if (expected_updated_at) {
+            const current = db.prepare(
+                'SELECT updated_at FROM users WHERE id = ?'
+            ).get(id);
+
+            if (current && current.updated_at !== expected_updated_at) {
+                return res.status(409).json({
+                    error: {
+                        message: 'This record has been modified by another user. Please refresh and try again.',
+                        code: 'CONCURRENT_MODIFICATION',
+                        current_updated_at: current.updated_at
+                    }
+                });
+            }
+        }
 
         const updates = [];
         const values = [];
@@ -85,7 +106,7 @@ router.patch('/:id', authenticate, (req, res, next) => {
         db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...values);
 
         const user = db.prepare(
-            'SELECT id, username, avatar_url FROM users WHERE id = ?'
+            'SELECT id, username, avatar_url, updated_at FROM users WHERE id = ?'
         ).get(id);
 
         res.json({ user });

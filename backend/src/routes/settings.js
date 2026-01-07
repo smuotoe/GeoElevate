@@ -48,17 +48,39 @@ router.get('/', authenticate, (req, res, next) => {
 /**
  * Update user settings.
  * PATCH /api/settings
+ *
+ * Supports optimistic concurrency control via `expected_updated_at` field.
+ * If provided, the update will only succeed if the record hasn't been
+ * modified since that timestamp.
  */
 router.patch('/', authenticate, (req, res, next) => {
     try {
         const db = getDb();
+        const { expected_updated_at, ...settingsUpdate } = req.body;
+
+        // Check for concurrent modification if expected_updated_at is provided
+        if (expected_updated_at) {
+            const current = db.prepare(
+                'SELECT updated_at FROM users WHERE id = ?'
+            ).get(req.userId);
+
+            if (current && current.updated_at !== expected_updated_at) {
+                return res.status(409).json({
+                    error: {
+                        message: 'Settings have been modified by another session. Please refresh and try again.',
+                        code: 'CONCURRENT_MODIFICATION',
+                        current_updated_at: current.updated_at
+                    }
+                });
+            }
+        }
 
         const user = db.prepare(
-            'SELECT settings_json FROM users WHERE id = ?'
+            'SELECT settings_json, updated_at FROM users WHERE id = ?'
         ).get(req.userId);
 
         const currentSettings = JSON.parse(user.settings_json || '{}');
-        const newSettings = { ...currentSettings, ...req.body };
+        const newSettings = { ...currentSettings, ...settingsUpdate };
 
         db.prepare(`
             UPDATE users
@@ -66,7 +88,15 @@ router.patch('/', authenticate, (req, res, next) => {
             WHERE id = ?
         `).run(JSON.stringify(newSettings), req.userId);
 
-        res.json({ message: 'Settings updated', settings: newSettings });
+        const updatedUser = db.prepare(
+            'SELECT updated_at FROM users WHERE id = ?'
+        ).get(req.userId);
+
+        res.json({
+            message: 'Settings updated',
+            settings: newSettings,
+            updated_at: updatedUser.updated_at
+        });
     } catch (err) {
         next(err);
     }
