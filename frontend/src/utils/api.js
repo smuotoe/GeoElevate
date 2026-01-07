@@ -46,10 +46,14 @@ export const api = {
      * Make a DELETE request.
      *
      * @param {string} endpoint - API endpoint
+     * @param {object} data - Optional request body
      * @returns {Promise<object>} Response data
      */
-    async delete(endpoint) {
-        return request(endpoint, { method: 'DELETE' })
+    async delete(endpoint, data) {
+        return request(endpoint, {
+            method: 'DELETE',
+            ...(data && { body: JSON.stringify(data) })
+        })
     },
 }
 

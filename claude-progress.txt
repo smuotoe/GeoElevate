@@ -1,215 +1,113 @@
-# GeoElevate - Session 1 Progress Report
+# GeoElevate - Progress Report
 
-## Session Overview
-- **Date**: Session 1 (Initializer Agent)
-- **Status**: Foundation Complete
-- **Feature Count**: 302 features created (0% implemented)
+## Session 3 Progress
+- **Date**: January 2025
+- **Status**: 11/302 features passing (3.6%)
+- **Focus**: Security features continued
 
-## Completed Tasks
+### Completed This Session
 
-### 1. Feature Creation (302 total)
-All 302 features have been created in the feature database covering all 20 mandatory test categories:
+#### Additional Security Features Verified
+8. **Feature #8**: Session timeout after inactivity - PASS
+   - JWT access token expires after 15 minutes
+   - API returns 401 with TOKEN_EXPIRED code
+   - Frontend handles token refresh automatically
 
-| Category | Count |
-|----------|-------|
-| A. Security & Access Control | 20 |
-| B. Navigation Integrity | 25 |
-| C. Real Data Verification | 26 |
-| D. Workflow Completeness | 20 |
-| E. Error Handling | 11 |
-| F. UI-Backend Integration | 9 |
-| G. State & Persistence | 7 |
-| H. URL & Direct Access | 5 |
-| I. Double-Action & Idempotency | 5 |
-| J. Data Cleanup & Cascade | 3 |
-| K. Default & Reset | 7 |
-| L. Search & Filter Edge Cases | 9 |
-| M. Form Validation | 6 |
-| N. Feedback & Notification | 9 |
-| O. Responsive & Layout | 9 |
-| P. Accessibility | 6 |
-| Q. Temporal & Timezone | 5 |
-| R. Concurrency & Race Conditions | 4 |
-| S. Export/Import | 2 |
-| T. Performance | 3 |
-| Game Features | ~70 |
-| End-to-End Journeys | 10 |
-| Style/UI Tests | ~46 |
+9. **Feature #9**: Cannot access other user data by ID manipulation - PASS
+   - PATCH /api/users/:id returns 403 for other users
+   - DELETE /api/users/:id returns 403 for other users
+   - GET /api/users/:id only returns public info (no email, settings)
 
-### 2. Project Structure Created
-```
-geo-elevate/
-+-- backend/
-|   +-- src/
-|   |   +-- index.js           # Express server with all routes
-|   |   +-- routes/            # 11 route files (auth, users, games, etc.)
-|   |   +-- middleware/        # Auth middleware (JWT)
-|   |   +-- models/            # Database schema (SQLite)
-|   |   +-- services/          # WebSocket service for multiplayer
-|   +-- data/                  # SQLite database location
-|   +-- package.json           # Dependencies defined
-|   +-- .env.example           # Environment template
-+-- frontend/
-|   +-- src/
-|   |   +-- components/        # BottomNav, ProtectedRoute
-|   |   +-- pages/             # 11 page components
-|   |   +-- context/           # AuthContext, ThemeContext
-|   |   +-- styles/            # CSS with design system
-|   |   +-- utils/             # API utility
-|   +-- package.json           # Vite + React deps
-|   +-- vite.config.js         # Proxy configured
-+-- init.sh                    # Setup script
-+-- README.md                  # Full documentation
-+-- .gitignore                 # Proper ignores
-```
+10. **Feature #10**: Password change requires current password - PASS
+    - New endpoint: POST /api/settings/change-password
+    - Requires currentPassword and newPassword
+    - Returns error for wrong current password
+    - Frontend form in Settings page
 
-### 3. Backend Implementation (Scaffolded)
-- **Express server** with all middleware configured
-- **SQLite database schema** with all 17+ tables:
-  - users, user_category_stats, user_fact_progress
-  - game_sessions, game_answers
-  - multiplayer_matches, multiplayer_answers
-  - friendships, activity_feed
-  - achievements, user_achievements
-  - daily_challenges, notifications
-  - leaderboard_snapshots, refresh_tokens
-  - Geography data: countries, capitals, flags, languages, trivia_facts
-- **All API routes implemented**:
-  - /api/auth (register, login, logout, refresh, me, forgot-password, reset-password)
-  - /api/users (CRUD, stats, achievements, game-history)
-  - /api/games (types, questions, sessions)
-  - /api/multiplayer (challenge, invites, matches)
-  - /api/friends (list, request, accept, decline, remove, activity-feed)
-  - /api/leaderboards (global, game, weekly, friends)
-  - /api/achievements (list, user achievements)
-  - /api/daily (challenges, streak, progress)
-  - /api/notifications (list, read, settings)
-  - /api/settings (get, patch)
-  - /api/sync (offline-data)
-- **WebSocket server** for multiplayer with:
-  - JWT authentication on connection
-  - Match joining and answer submission
-  - Real-time score updates
-  - Anti-cheat timing validation
-  - Server-side answer validation
+11. **Feature #11**: Account deletion requires password confirmation - PASS
+    - DELETE /api/users/:id requires password in request body
+    - Confirmation dialog in Settings page
+    - Account permanently deleted on success
 
-### 4. Frontend Implementation (Scaffolded)
-- **React 18 with Vite** configured
-- **React Router** with protected routes
-- **Context providers**:
-  - AuthContext (login, register, logout, token refresh)
-  - ThemeContext (dark/light mode)
-- **CSS Design System** with variables for:
-  - Colors (dark and light themes)
-  - Typography
-  - Spacing
-  - Shadows and borders
-- **Page components** (placeholder implementations):
-  - Login, Register
-  - Today (home)
-  - Games, GamePlay
-  - Leaderboards
-  - Notifications
-  - Profile, Friends, Achievements
-  - Settings
-  - NotFound (404)
-- **Bottom navigation** component
+### Code Changes This Session
 
-### 5. init.sh Script
-- Checks Node.js version (requires 18+)
-- Installs backend and frontend dependencies
-- Creates .env file from template
-- Starts both servers with concurrently
-- Supports --setup-only, --backend-only, --frontend-only flags
+#### Backend
+- `backend/src/routes/settings.js` - Added change-password endpoint
+- `backend/src/routes/users.js` - Fixed bcrypt import for delete endpoint
 
-### 6. Git Repository
-- Initialized with initial commit
-- Proper .gitignore configured
-- All project files committed
+#### Frontend
+- `frontend/src/pages/Settings.jsx` - Added password change form and delete account dialog
+- `frontend/src/utils/api.js` - Updated delete method to support request body
 
-## What the Next Agent Should Do
-
-### Immediate Priority (Features 1-50)
-1. **Seed the geography database** with real data:
-   - Countries (all ~195)
-   - Capitals
-   - Flags (URLs or local assets)
-   - Languages
-   - Country-language mappings
-   - Trivia facts
-
-2. **Seed achievements** with the defined achievements:
-   - Flag Master (100 flags)
-   - World Traveler (all continents)
-   - Speed Demon (10 fast answers)
-   - Perfect Game (100% accuracy)
-   - Social Butterfly (10 friends)
-   - Winning Streak (5 MP wins)
-   - Dedicated Learner (30-day streak)
-
-3. **Complete the game engine**:
-   - Timer component
-   - Multiple choice UI
-   - Typing input with fuzzy matching (Levenshtein)
-   - Score calculation with speed bonuses
-   - Streak multiplier system
-   - End game summary screen
-
-### Medium Priority (Features 51-150)
-4. **Complete game types**:
-   - Flags (both directions)
-   - Capitals (both directions)
-   - Maps (interactive map component)
-   - Languages (both directions)
-   - Trivia
-
-5. **Implement spaced repetition**:
-   - SM-2 or similar algorithm
-   - Question scheduling based on performance
-   - Mastery level tracking
-
-6. **Complete multiplayer**:
-   - Match lobby UI
-   - Real-time game UI
-   - Post-match results screen
-
-### Lower Priority (Features 151-302)
-7. **Polish and optimization**:
-   - Animations
-   - Loading states
-   - Error handling
-   - Accessibility
-   - Responsive design testing
-
-## How to Continue
+### How to Start Development
 
 ```bash
-# Start development
-cd geo-elevate
-./init.sh
+# Start backend (from project root)
+npm install --prefix backend
+npm run dev --prefix backend
 
-# Or manually:
-cd backend && npm install && npm run dev
-cd frontend && npm install && npm run dev
+# Start frontend (in another terminal)
+npm install --prefix frontend
+npm run dev --prefix frontend
 ```
 
-Get the next feature to work on:
-```
-Use the feature_get_next tool
-```
+Backend runs on http://localhost:3001
+Frontend runs on http://localhost:5173
 
-Mark a feature as passing when complete:
-```
-Use the feature_mark_passing tool with feature_id=X
-```
+### What the Next Agent Should Do
 
-## Notes for Future Agents
+1. **Continue with remaining features** (Features 12+)
+2. **Seed geography data** - Countries, capitals, flags, languages are needed for games
+3. **Implement game engine** - Currently GamePlay.jsx is a placeholder
+4. **Build leaderboards functionality**
 
-- **NO MOCK DATA**: All data must come from the SQLite database
-- **Server-side validation**: All game answers validated on server
-- **JWT tokens**: Access (15min) + Refresh (30 days) tokens
-- **WebSocket auth**: Requires valid JWT token on handshake
-- **CSS Variables**: Use the design system variables, not hardcoded colors
-- **Follow PEP 8 style** in any Python scripts (if added)
-- **Type hints** for all functions
-- **Docstrings** for all public functions
+### Technical Notes
+
+- **Database**: sql.js (pure JS SQLite) - database saved to `backend/data/geoelevate.db`
+- **Auth**: JWT tokens stored in localStorage (accessToken) and httpOnly cookies (refreshToken)
+- **Token expiry**: Access token 15m, Refresh token 30d
+- **CSS**: Design system with CSS variables in `frontend/src/styles/index.css`
+- **Test user**: test@example.com / password123 / testuser
+
+### Known Issues
+
+- GamePlay.jsx is a placeholder - needs actual game implementation
+- No geography data seeded yet
+- Leaderboards page needs implementation
+- Profile page needs styling improvements
+
+---
+
+## Session 2 Summary (Previous)
+
+### Features 1-7 Completed
+- Guest mode implementation (guest-accessible pages vs protected pages)
+- BottomNav shows different items based on login status
+- Security features: 401 for unauthenticated, invalid token rejection, logout clears session
+
+### Infrastructure
+- Switched from better-sqlite3 to sql.js for Windows compatibility
+- Made database initialization async
+
+---
+
+## Session 1 Summary
+
+### Foundation Complete
+- 302 features created in feature database
+- Project structure set up (backend/frontend)
+- All API routes scaffolded
+- SQLite database schema created
+- React Router with auth context
+- CSS design system (dark/light themes)
+- WebSocket server for multiplayer
+
+### Database Tables Created
+- users, user_category_stats, user_fact_progress
+- game_sessions, game_answers
+- multiplayer_matches, multiplayer_answers
+- friendships, activity_feed
+- achievements, user_achievements
+- daily_challenges, notifications
+- leaderboard_snapshots, refresh_tokens
+- countries, capitals, flags, languages, country_languages, trivia_facts

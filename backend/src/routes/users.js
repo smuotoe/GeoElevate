@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getDb } from '../models/database.js';
 import { authenticate } from '../middleware/auth.js';
+import bcrypt from 'bcryptjs';
 
 const router = Router();
 
@@ -114,7 +115,6 @@ router.delete('/:id', authenticate, async (req, res, next) => {
         }
 
         // Verify password
-        const bcrypt = await import('bcryptjs');
         const isValid = await bcrypt.compare(password, user.password_hash);
 
         if (!isValid) {
