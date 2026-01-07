@@ -46,6 +46,17 @@ export function AuthProvider({ children }) {
         checkAuth()
     }, [])
 
+    // Listen for auth:logout events from API (e.g., token invalid/expired)
+    useEffect(() => {
+        function handleAuthLogout() {
+            dispatch({ type: 'LOGOUT' })
+        }
+        window.addEventListener('auth:logout', handleAuthLogout)
+        return () => {
+            window.removeEventListener('auth:logout', handleAuthLogout)
+        }
+    }, [])
+
     /**
      * Check if user is authenticated.
      */

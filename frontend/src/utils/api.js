@@ -1,4 +1,17 @@
 const API_BASE = '/api'
+const DEFAULT_TIMEOUT = 15000 // 15 seconds
+
+/**
+ * Create an AbortController with timeout.
+ *
+ * @param {number} ms - Timeout in milliseconds
+ * @returns {{ controller: AbortController, timeoutId: number }}
+ */
+function createTimeoutController(ms) {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), ms)
+    return { controller, timeoutId }
+}
 
 /**
  * API utility for making HTTP requests.
@@ -58,13 +71,14 @@ export const api = {
 }
 
 /**
- * Make an HTTP request with authentication.
+ * Make an HTTP request with authentication and timeout.
  *
  * @param {string} endpoint - API endpoint
  * @param {object} options - Fetch options
+ * @param {number} timeout - Request timeout in ms (default 15s)
  * @returns {Promise<object>} Response data
  */
-async function request(endpoint, options = {}) {
+async function request(endpoint, options = {}, timeout = DEFAULT_TIMEOUT) {
     const url = `${API_BASE}${endpoint}`
     const token = localStorage.getItem('accessToken')
 
@@ -74,13 +88,27 @@ async function request(endpoint, options = {}) {
         ...options.headers,
     }
 
-    const response = await fetch(url, {
-        ...options,
-        headers,
-        credentials: 'include',
-    })
+    const { controller, timeoutId } = createTimeoutController(timeout)
 
-    // Handle token expiration
+    let response
+    try {
+        response = await fetch(url, {
+            ...options,
+            headers,
+            credentials: 'include',
+            signal: controller.signal,
+        })
+    } catch (err) {
+        clearTimeout(timeoutId)
+        if (err.name === 'AbortError') {
+            throw new Error('Request timed out. Please check your connection and try again.')
+        }
+        throw new Error('Network error. Please check your connection.')
+    }
+
+    clearTimeout(timeoutId)
+
+    // Handle token expiration or invalid token (e.g., localStorage cleared)
     if (response.status === 401) {
         const data = await response.json()
         if (data.error?.code === 'TOKEN_EXPIRED') {
@@ -95,9 +123,12 @@ async function request(endpoint, options = {}) {
                         ...headers,
                         Authorization: `Bearer ${newToken}`,
                     },
-                })
+                }, timeout)
             }
         }
+        // Token is invalid or missing - trigger logout and redirect
+        localStorage.removeItem('accessToken')
+        window.dispatchEvent(new CustomEvent('auth:logout'))
         throw new Error(data.error?.message || 'Authentication required')
     }
 
@@ -130,8 +161,9 @@ async function refreshToken() {
         // Refresh failed
     }
 
-    // Clear token and redirect to login
+    // Clear token and dispatch auth failure event for redirect to login
     localStorage.removeItem('accessToken')
+    window.dispatchEvent(new CustomEvent('auth:logout'))
     return false
 }
 

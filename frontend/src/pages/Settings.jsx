@@ -1,8 +1,10 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { api } from '../utils/api'
+import { useUnsavedChanges } from '../hooks/useUnsavedChanges'
+import UnsavedChangesDialog from '../components/UnsavedChangesDialog'
 
 /**
  * Settings page component.
@@ -24,6 +26,13 @@ function Settings() {
     const [deletePassword, setDeletePassword] = useState('')
     const [deleteError, setDeleteError] = useState('')
     const [deleteLoading, setDeleteLoading] = useState(false)
+
+    // Track unsaved changes in the password form
+    const hasUnsavedChanges = showPasswordForm && (currentPassword || newPassword || confirmPassword)
+    const { showDialog, confirmNavigation, cancelNavigation, message } = useUnsavedChanges(
+        hasUnsavedChanges,
+        'You have unsaved changes in the password form. Are you sure you want to leave?'
+    )
 
     /**
      * Handle logout.
@@ -118,6 +127,14 @@ function Settings() {
 
     return (
         <div className="page">
+            {/* Unsaved Changes Dialog */}
+            <UnsavedChangesDialog
+                isOpen={showDialog}
+                onConfirm={confirmNavigation}
+                onCancel={cancelNavigation}
+                message={message}
+            />
+
             <div className="page-header">
                 <button className="btn btn-secondary" onClick={() => navigate(-1)}>
                     Back
@@ -319,7 +336,10 @@ function Settings() {
 
             <section className="card mb-md">
                 <h3 className="mb-md">Help & Support</h3>
-                <p className="text-secondary">FAQ, contact support, and more.</p>
+                <p className="text-secondary mb-md">FAQ, contact support, and more.</p>
+                <Link to="/help" className="btn btn-secondary">
+                    View Help & FAQ
+                </Link>
             </section>
 
             <button
