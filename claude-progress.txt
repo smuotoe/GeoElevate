@@ -1,43 +1,58 @@
 # GeoElevate - Progress Report
 
-## Session 3 Progress
+## Session 3 Progress (Continued)
 - **Date**: January 2025
-- **Status**: 11/302 features passing (3.6%)
-- **Focus**: Security features continued
+- **Status**: 16/302 features passing (5.3%)
+- **Focus**: Security features and UI verification
 
 ### Completed This Session
 
-#### Additional Security Features Verified
+#### Security Features (8-11)
 8. **Feature #8**: Session timeout after inactivity - PASS
-   - JWT access token expires after 15 minutes
-   - API returns 401 with TOKEN_EXPIRED code
-   - Frontend handles token refresh automatically
-
 9. **Feature #9**: Cannot access other user data by ID manipulation - PASS
-   - PATCH /api/users/:id returns 403 for other users
-   - DELETE /api/users/:id returns 403 for other users
-   - GET /api/users/:id only returns public info (no email, settings)
-
 10. **Feature #10**: Password change requires current password - PASS
-    - New endpoint: POST /api/settings/change-password
-    - Requires currentPassword and newPassword
-    - Returns error for wrong current password
-    - Frontend form in Settings page
-
 11. **Feature #11**: Account deletion requires password confirmation - PASS
-    - DELETE /api/users/:id requires password in request body
-    - Confirmation dialog in Settings page
-    - Account permanently deleted on success
+
+#### Additional Security (14, 16)
+14. **Feature #14**: Failed login no information leakage - PASS
+    - Same generic error for non-existent user and wrong password
+    - Timing attack protection added (always runs bcrypt.compare)
+
+16. **Feature #16**: WebSocket requires valid JWT - PASS
+    - No token: Connection closed with 4001 "Authentication required"
+    - Invalid token: Connection closed with 4002 "Invalid token"
+    - Valid token: Connection succeeds
+
+#### UI Verification (18-20)
+18. **Feature #18**: Authenticated user menu items correct - PASS
+    - Nav shows: Today, Leaderboards, Games, Alerts, Me
+    - Friends link available in Profile
+    - Multiplayer available in Games
+
+19. **Feature #19**: Guest user menu items restricted - PASS
+    - Nav shows: Today, Leaderboards, Games, Log In
+    - Multiplayer shows "Login Required" badge and modal
+
+20. **Feature #20**: Direct URL to protected route redirects - PASS
+    - /friends redirects to /login
+    - /multiplayer redirects to /login
 
 ### Code Changes This Session
 
 #### Backend
 - `backend/src/routes/settings.js` - Added change-password endpoint
 - `backend/src/routes/users.js` - Fixed bcrypt import for delete endpoint
+- `backend/src/routes/auth.js` - Added timing attack protection to login
 
 #### Frontend
-- `frontend/src/pages/Settings.jsx` - Added password change form and delete account dialog
+- `frontend/src/pages/Settings.jsx` - Password change form and delete account dialog
 - `frontend/src/utils/api.js` - Updated delete method to support request body
+
+### Features Skipped (require more infrastructure)
+- Feature #12: Email change requires verification (needs email service)
+- Feature #13: Password reset flow (needs email service)
+- Feature #15: Multiplayer answer validation (needs game data)
+- Feature #17: Rate limiting (needs implementation)
 
 ### How to Start Development
 
@@ -56,38 +71,29 @@ Frontend runs on http://localhost:5173
 
 ### What the Next Agent Should Do
 
-1. **Continue with remaining features** (Features 12+)
-2. **Seed geography data** - Countries, capitals, flags, languages are needed for games
-3. **Implement game engine** - Currently GamePlay.jsx is a placeholder
-4. **Build leaderboards functionality**
+1. **Seed geography data** - Countries, capitals, flags, languages needed for games
+2. **Implement game engine** - GamePlay.jsx is a placeholder
+3. **Build leaderboards functionality**
+4. **Continue with remaining features** (Features 21+)
 
 ### Technical Notes
 
 - **Database**: sql.js (pure JS SQLite) - database saved to `backend/data/geoelevate.db`
 - **Auth**: JWT tokens stored in localStorage (accessToken) and httpOnly cookies (refreshToken)
 - **Token expiry**: Access token 15m, Refresh token 30d
-- **CSS**: Design system with CSS variables in `frontend/src/styles/index.css`
+- **WebSocket**: Port 3002, requires JWT token in query param
 - **Test user**: test@example.com / password123 / testuser
-
-### Known Issues
-
-- GamePlay.jsx is a placeholder - needs actual game implementation
-- No geography data seeded yet
-- Leaderboards page needs implementation
-- Profile page needs styling improvements
 
 ---
 
-## Session 2 Summary (Previous)
+## Session 2 Summary
 
 ### Features 1-7 Completed
-- Guest mode implementation (guest-accessible pages vs protected pages)
-- BottomNav shows different items based on login status
+- Guest mode implementation
 - Security features: 401 for unauthenticated, invalid token rejection, logout clears session
 
 ### Infrastructure
 - Switched from better-sqlite3 to sql.js for Windows compatibility
-- Made database initialization async
 
 ---
 
@@ -101,13 +107,3 @@ Frontend runs on http://localhost:5173
 - React Router with auth context
 - CSS design system (dark/light themes)
 - WebSocket server for multiplayer
-
-### Database Tables Created
-- users, user_category_stats, user_fact_progress
-- game_sessions, game_answers
-- multiplayer_matches, multiplayer_answers
-- friendships, activity_feed
-- achievements, user_achievements
-- daily_challenges, notifications
-- leaderboard_snapshots, refresh_tokens
-- countries, capitals, flags, languages, country_languages, trivia_facts
