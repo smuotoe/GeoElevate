@@ -107,6 +107,7 @@ function GamePlay() {
 
     const [gameState, setGameState] = useState('mode-select')
     const [inputMode, setInputMode] = useState('choice') // 'choice' or 'typing'
+    const [questionMode, setQuestionMode] = useState('') // game-specific direction mode
     const [questions, setQuestions] = useState([])
     const [currentIndex, setCurrentIndex] = useState(0)
     const [timeLeft, setTimeLeft] = useState(QUESTION_TIME)
@@ -123,6 +124,10 @@ function GamePlay() {
     const [wasOffline, setWasOffline] = useState(false)
     const [regions, setRegions] = useState([])
     const [selectedRegion, setSelectedRegion] = useState('')
+    const [gameStats, setGameStats] = useState({ xpEarned: 0, avgTimeMs: 0 })
+    const [showReview, setShowReview] = useState(false)
+    const [showShareDialog, setShowShareDialog] = useState(false)
+    const [shareMessage, setShareMessage] = useState('')
 
     const timerRef = useRef(null)
     const pausedTimeRef = useRef(null)
@@ -151,12 +156,22 @@ function GamePlay() {
         fetchRegions()
     }, [])
 
+    // Set default question mode based on game type
+    useEffect(() => {
+        if (gameType === 'flags' && !questionMode) {
+            setQuestionMode('flag-to-country')
+        } else if (gameType === 'capitals' && !questionMode) {
+            setQuestionMode('country-to-capital')
+        }
+    }, [gameType, questionMode])
+
     const loadQuestions = useCallback(async () => {
         try {
             setGameState('loading')
             setError(null)
             const regionParam = selectedRegion ? `&region=${selectedRegion}` : ''
-            const data = await api.get(`/games/questions?type=${gameType}&count=${TOTAL_QUESTIONS}${regionParam}`)
+            const modeParam = questionMode ? `&mode=${questionMode}` : ''
+            const data = await api.get(`/games/questions?type=${gameType}&count=${TOTAL_QUESTIONS}${regionParam}${modeParam}`)
 
             if (!data.questions || data.questions.length === 0) {
                 setError('No questions available for this game type. Please try another game.')
@@ -185,7 +200,7 @@ function GamePlay() {
             setError(err.message)
             setGameState('error')
         }
-    }, [gameType, user, selectedRegion])
+    }, [gameType, user, selectedRegion, questionMode])
 
     // Start game with selected mode
     const startGame = (mode) => {
@@ -369,6 +384,8 @@ function GamePlay() {
                 )
                 const xpEarned = Math.round(scoreToUse * 0.1)
 
+                setGameStats({ xpEarned, avgTimeMs })
+
                 try {
                     await api.patch(`/games/sessions/${sessionId}`, {
                         score: scoreToUse,
@@ -431,7 +448,51 @@ function GamePlay() {
         setIsPaused(false)
         setShowQuitConfirm(false)
         setSessionId(null)
+        setShowShareDialog(false)
+        setShareMessage('')
         loadQuestions()
+    }
+
+    /**
+     * Handle share button click - generates shareable content.
+     */
+    const handleShare = () => {
+        const correctCount = answers.filter(a => a.isCorrect).length
+        const accuracy = Math.round((correctCount / answers.length) * 100)
+        const message = `I just scored ${score} points in ${formattedGameType} on GeoElevate! ${correctCount}/${answers.length} correct (${accuracy}% accuracy). Can you beat my score?`
+        setShareMessage(message)
+        setShowShareDialog(true)
+    }
+
+    /**
+     * Copy share message to clipboard.
+     */
+    const handleCopyShare = async () => {
+        try {
+            await navigator.clipboard.writeText(shareMessage)
+            alert('Copied to clipboard!')
+        } catch (err) {
+            console.error('Failed to copy:', err)
+        }
+    }
+
+    /**
+     * Share via native share API if available.
+     */
+    const handleNativeShare = async () => {
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: 'GeoElevate Results',
+                    text: shareMessage,
+                    url: window.location.origin
+                })
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    console.error('Failed to share:', err)
+                }
+            }
+        }
     }
 
     const getOptionClass = (option) => {
@@ -487,6 +548,66 @@ function GamePlay() {
                         </button>
                     </div>
                 </div>
+                {(gameType === 'flags' || gameType === 'capitals') && (
+                    <div className="card" style={{ marginTop: '16px' }}>
+                        <h3 style={{ marginBottom: '12px', color: 'var(--text-primary)' }}>
+                            Question Direction
+                        </h3>
+                        <p className="text-secondary" style={{ marginBottom: '16px' }}>
+                            Choose what you want to identify:
+                        </p>
+                        <div className={styles.modeButtons}>
+                            {gameType === 'flags' && (
+                                <>
+                                    <button
+                                        className={`btn ${questionMode === 'flag-to-country' ? 'btn-primary' : 'btn-secondary'}`}
+                                        onClick={() => setQuestionMode('flag-to-country')}
+                                        style={{ flex: 1, padding: '12px' }}
+                                    >
+                                        Flag to Country
+                                        <span style={{ display: 'block', fontSize: '12px', opacity: 0.8, marginTop: '4px' }}>
+                                            See flag, name country
+                                        </span>
+                                    </button>
+                                    <button
+                                        className={`btn ${questionMode === 'country-to-flag' ? 'btn-primary' : 'btn-secondary'}`}
+                                        onClick={() => setQuestionMode('country-to-flag')}
+                                        style={{ flex: 1, padding: '12px' }}
+                                    >
+                                        Country to Flag
+                                        <span style={{ display: 'block', fontSize: '12px', opacity: 0.8, marginTop: '4px' }}>
+                                            See country, pick flag
+                                        </span>
+                                    </button>
+                                </>
+                            )}
+                            {gameType === 'capitals' && (
+                                <>
+                                    <button
+                                        className={`btn ${questionMode === 'country-to-capital' ? 'btn-primary' : 'btn-secondary'}`}
+                                        onClick={() => setQuestionMode('country-to-capital')}
+                                        style={{ flex: 1, padding: '12px' }}
+                                    >
+                                        Country to Capital
+                                        <span style={{ display: 'block', fontSize: '12px', opacity: 0.8, marginTop: '4px' }}>
+                                            See country, name capital
+                                        </span>
+                                    </button>
+                                    <button
+                                        className={`btn ${questionMode === 'capital-to-country' ? 'btn-primary' : 'btn-secondary'}`}
+                                        onClick={() => setQuestionMode('capital-to-country')}
+                                        style={{ flex: 1, padding: '12px' }}
+                                    >
+                                        Capital to Country
+                                        <span style={{ display: 'block', fontSize: '12px', opacity: 0.8, marginTop: '4px' }}>
+                                            See capital, name country
+                                        </span>
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                )}
                 <div className="card" style={{ marginTop: '16px' }}>
                     <h3 style={{ marginBottom: '12px', color: 'var(--text-primary)' }}>
                         Filter by Region
@@ -561,6 +682,8 @@ function GamePlay() {
     if (gameState === 'finished') {
         const correctCount = answers.filter(a => a.isCorrect).length
         const accuracy = Math.round((correctCount / answers.length) * 100)
+        const avgTimeSec = (gameStats.avgTimeMs / 1000).toFixed(1)
+        const wrongAnswers = answers.filter(a => !a.isCorrect)
 
         return (
             <div className="page">
@@ -575,6 +698,10 @@ function GamePlay() {
                     </div>
                     <div className={styles.statsGrid}>
                         <div className={styles.stat}>
+                            <span className={styles.statValue}>+{gameStats.xpEarned}</span>
+                            <span className={styles.statLabel}>XP Earned</span>
+                        </div>
+                        <div className={styles.stat}>
                             <span className={styles.statValue}>{correctCount}/{answers.length}</span>
                             <span className={styles.statLabel}>Correct</span>
                         </div>
@@ -582,16 +709,100 @@ function GamePlay() {
                             <span className={styles.statValue}>{accuracy}%</span>
                             <span className={styles.statLabel}>Accuracy</span>
                         </div>
+                        <div className={styles.stat}>
+                            <span className={styles.statValue}>{avgTimeSec}s</span>
+                            <span className={styles.statLabel}>Avg Time</span>
+                        </div>
                     </div>
                     <div className={styles.buttonGroup}>
                         <button className="btn btn-secondary" onClick={() => navigate('/games')}>
                             Back to Games
+                        </button>
+                        {wrongAnswers.length > 0 && (
+                            <button
+                                className="btn btn-secondary"
+                                onClick={() => setShowReview(!showReview)}
+                            >
+                                {showReview ? 'Hide Review' : 'Review Mistakes'}
+                            </button>
+                        )}
+                        <button className="btn btn-secondary" onClick={handleShare}>
+                            Share
                         </button>
                         <button className="btn btn-primary" onClick={handleRestart}>
                             Play Again
                         </button>
                     </div>
                 </div>
+
+                <Modal
+                    isOpen={showShareDialog}
+                    onClose={() => setShowShareDialog(false)}
+                    title="Share Your Results"
+                >
+                    <div className={styles.shareContent}>
+                        <p className={styles.shareMessage}>{shareMessage}</p>
+                        <div className={styles.shareButtons}>
+                            <button className="btn btn-secondary" onClick={handleCopyShare}>
+                                Copy to Clipboard
+                            </button>
+                            {navigator.share && (
+                                <button className="btn btn-primary" onClick={handleNativeShare}>
+                                    Share
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </Modal>
+
+                {showReview && wrongAnswers.length > 0 && (
+                    <div className={styles.reviewSection}>
+                        <h3 className={styles.reviewTitle}>Questions You Missed</h3>
+                        <div className={styles.reviewList}>
+                            {wrongAnswers.map((answer, idx) => {
+                                const questionText = answer.question.prompt || answer.question.question || answer.question.correctAnswer
+                                const isQuestionImage = questionText?.startsWith('http')
+                                const isUserAnswerImage = answer.userAnswer?.startsWith('http')
+                                const isCorrectAnswerImage = answer.correctAnswer?.startsWith('http')
+
+                                return (
+                                    <div key={idx} className={styles.reviewItem}>
+                                        <div className={styles.reviewQuestion}>
+                                            <span className={styles.reviewNumber}>Q{answers.indexOf(answer) + 1}.</span>
+                                            {isQuestionImage ? (
+                                                <img src={questionText} alt="Question" className={styles.reviewImage} />
+                                            ) : (
+                                                <span>{questionText}</span>
+                                            )}
+                                        </div>
+                                        <div className={styles.reviewAnswers}>
+                                            <div className={styles.yourAnswer}>
+                                                <span className={styles.answerLabel}>Your answer:</span>
+                                                {answer.userAnswer ? (
+                                                    isUserAnswerImage ? (
+                                                        <img src={answer.userAnswer} alt="Your answer" className={styles.reviewAnswerImage} />
+                                                    ) : (
+                                                        <span className={styles.wrongAnswer}>{answer.userAnswer}</span>
+                                                    )
+                                                ) : (
+                                                    <span className={styles.wrongAnswer}>(No answer)</span>
+                                                )}
+                                            </div>
+                                            <div className={styles.correctAnswerRow}>
+                                                <span className={styles.answerLabel}>Correct answer:</span>
+                                                {isCorrectAnswerImage ? (
+                                                    <img src={answer.correctAnswer} alt="Correct answer" className={styles.reviewAnswerImage} />
+                                                ) : (
+                                                    <span className={styles.correctAnswer}>{answer.correctAnswer}</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    </div>
+                )}
             </div>
         )
     }
