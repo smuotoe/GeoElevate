@@ -11,6 +11,30 @@ const TOTAL_QUESTIONS = 10
 const FUZZY_THRESHOLD = 0.75 // 75% similarity required for fuzzy match
 
 /**
+ * Custom hook to track network connection status.
+ *
+ * @returns {boolean} True if online, false if offline
+ */
+function useOnlineStatus() {
+    const [isOnline, setIsOnline] = useState(navigator.onLine)
+
+    useEffect(() => {
+        const handleOnline = () => setIsOnline(true)
+        const handleOffline = () => setIsOnline(false)
+
+        window.addEventListener('online', handleOnline)
+        window.addEventListener('offline', handleOffline)
+
+        return () => {
+            window.removeEventListener('online', handleOnline)
+            window.removeEventListener('offline', handleOffline)
+        }
+    }, [])
+
+    return isOnline
+}
+
+/**
  * Format game type string with capitalized first letter.
  *
  * @param {string} gameType - The game type to format
@@ -79,6 +103,7 @@ function GamePlay() {
     const navigate = useNavigate()
     const { user, checkAuth } = useAuth()
     const formattedGameType = formatGameType(gameType)
+    const isOnline = useOnlineStatus()
 
     const [gameState, setGameState] = useState('mode-select')
     const [inputMode, setInputMode] = useState('choice') // 'choice' or 'typing'
@@ -95,11 +120,15 @@ function GamePlay() {
     const [showResult, setShowResult] = useState(false)
     const [error, setError] = useState(null)
     const [sessionId, setSessionId] = useState(null)
+    const [wasOffline, setWasOffline] = useState(false)
+    const [regions, setRegions] = useState([])
+    const [selectedRegion, setSelectedRegion] = useState('')
 
     const timerRef = useRef(null)
     const pausedTimeRef = useRef(null)
     const processingRef = useRef(false)
     const inputRef = useRef(null)
+    const offlinePausedRef = useRef(false)
 
     const currentQuestion = questions[currentIndex]
 
@@ -109,11 +138,25 @@ function GamePlay() {
         { label: 'Play', path: null }
     ]
 
+    // Fetch available regions on mount
+    useEffect(() => {
+        async function fetchRegions() {
+            try {
+                const data = await api.get('/games/regions')
+                setRegions(data.regions || [])
+            } catch (err) {
+                console.error('Failed to load regions:', err)
+            }
+        }
+        fetchRegions()
+    }, [])
+
     const loadQuestions = useCallback(async () => {
         try {
             setGameState('loading')
             setError(null)
-            const data = await api.get(`/games/questions?type=${gameType}&count=${TOTAL_QUESTIONS}`)
+            const regionParam = selectedRegion ? `&region=${selectedRegion}` : ''
+            const data = await api.get(`/games/questions?type=${gameType}&count=${TOTAL_QUESTIONS}${regionParam}`)
 
             if (!data.questions || data.questions.length === 0) {
                 setError('No questions available for this game type. Please try another game.')
@@ -142,7 +185,7 @@ function GamePlay() {
             setError(err.message)
             setGameState('error')
         }
-    }, [gameType, user])
+    }, [gameType, user, selectedRegion])
 
     // Start game with selected mode
     const startGame = (mode) => {
@@ -156,6 +199,25 @@ function GamePlay() {
             inputRef.current.focus()
         }
     }, [currentIndex, gameState, inputMode])
+
+    // Handle offline/online transitions during game
+    useEffect(() => {
+        if (gameState !== 'playing') return
+
+        if (!isOnline && !offlinePausedRef.current) {
+            // Went offline - pause the game
+            offlinePausedRef.current = true
+            if (timerRef.current) {
+                clearInterval(timerRef.current)
+            }
+            pausedTimeRef.current = timeLeft
+            setIsPaused(true)
+            setWasOffline(true)
+        } else if (isOnline && offlinePausedRef.current) {
+            // Came back online - can resume
+            offlinePausedRef.current = false
+        }
+    }, [isOnline, gameState, timeLeft])
 
     useEffect(() => {
         if (gameState !== 'playing' || isPaused || showResult || showQuitConfirm) {
@@ -425,6 +487,37 @@ function GamePlay() {
                         </button>
                     </div>
                 </div>
+                <div className="card" style={{ marginTop: '16px' }}>
+                    <h3 style={{ marginBottom: '12px', color: 'var(--text-primary)' }}>
+                        Filter by Region
+                    </h3>
+                    <p className="text-secondary" style={{ marginBottom: '16px' }}>
+                        Optional: Focus on a specific continent
+                    </p>
+                    <select
+                        id="regionFilter"
+                        aria-label="Filter by Region"
+                        value={selectedRegion}
+                        onChange={(e) => setSelectedRegion(e.target.value)}
+                        className="input"
+                        style={{
+                            width: '100%',
+                            padding: '12px',
+                            borderRadius: '8px',
+                            backgroundColor: 'var(--surface)',
+                            color: 'var(--text-primary)',
+                            border: '1px solid var(--border)',
+                            fontSize: '16px'
+                        }}
+                    >
+                        <option value="">All Regions</option>
+                        {regions.map(region => (
+                            <option key={region.id} value={region.name}>
+                                {region.name}
+                            </option>
+                        ))}
+                    </select>
+                </div>
             </div>
         )
     }
@@ -516,6 +609,11 @@ function GamePlay() {
 
     return (
         <div className="page">
+            {!isOnline && (
+                <div className={styles.offlineIndicator}>
+                    <span>!</span> No Connection
+                </div>
+            )}
             <div className={styles.gameHeader}>
                 <div className={styles.progress}>
                     <span>Question {currentIndex + 1}/{questions.length}</span>
@@ -618,10 +716,16 @@ function GamePlay() {
 
             <Modal
                 isOpen={isPaused && !showQuitConfirm}
-                onClose={handleResume}
-                title="Game Paused"
+                onClose={isOnline ? handleResume : undefined}
+                title={!isOnline ? "Connection Lost" : "Game Paused"}
             >
                 <div className={styles.pauseContent}>
+                    {!isOnline && (
+                        <div className={styles.offlineWarning}>
+                            <span className={styles.offlineIcon}>!</span>
+                            <p>You are currently offline. The game will resume when your connection is restored.</p>
+                        </div>
+                    )}
                     <p className={styles.pauseInfo}>
                         Question {currentIndex + 1} of {questions.length}
                     </p>
@@ -641,8 +745,9 @@ function GamePlay() {
                         <button
                             className="btn btn-primary"
                             onClick={handleResume}
+                            disabled={!isOnline}
                         >
-                            Resume
+                            {isOnline ? 'Resume' : 'Waiting...'}
                         </button>
                     </div>
                 </div>
