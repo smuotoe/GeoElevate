@@ -101,29 +101,31 @@ router.get('/questions', optionalAuthenticate, (req, res, next) => {
  * Start a game session.
  * POST /api/games/sessions
  */
-router.post('/sessions', authenticate, (req, res, next) => {
+router.post('/sessions', authenticate, (req, res) => {
+    const { gameType, gameMode = 'solo', difficulty = 'medium', regionFilter } = req.body;
+
+    if (!gameType) {
+        return res.status(400).json({
+            error: { message: 'Game type is required' }
+        });
+    }
+
     try {
-        const { gameType, gameMode = 'solo', difficulty = 'medium', regionFilter } = req.body;
-
-        if (!gameType) {
-            return res.status(400).json({
-                error: { message: 'Game type is required' }
-            });
-        }
-
         const db = getDb();
-
         const result = db.prepare(`
             INSERT INTO game_sessions (user_id, game_type, game_mode, difficulty_level, region_filter)
             VALUES (?, ?, ?, ?, ?)
-        `).run(req.userId, gameType, gameMode, difficulty, regionFilter);
+        `).run(req.userId, gameType, gameMode, difficulty, regionFilter || null);
 
-        res.status(201).json({
+        return res.status(201).json({
             sessionId: result.lastInsertRowid,
             message: 'Game session started'
         });
     } catch (err) {
-        next(err);
+        console.error('Session creation error:', err);
+        return res.status(500).json({
+            error: { message: String(err.message || err) || 'Failed to create session' }
+        });
     }
 });
 
@@ -134,7 +136,11 @@ router.post('/sessions', authenticate, (req, res, next) => {
 router.patch('/sessions/:id', authenticate, (req, res, next) => {
     try {
         const { id } = req.params;
-        const { answers, score, xpEarned, correctCount, averageTimeMs } = req.body;
+        const { answers, score, xpEarned, correctCount: rawCorrectCount, averageTimeMs } = req.body;
+
+        // Calculate correctCount from answers if not provided
+        const correctCount = rawCorrectCount ?? (answers ? answers.filter(a => a.isCorrect).length : 0);
+        console.log('PATCH session - rawCorrectCount:', rawCorrectCount, 'calculatedCorrectCount:', correctCount);
 
         const db = getDb();
 
@@ -179,6 +185,7 @@ router.patch('/sessions/:id', authenticate, (req, res, next) => {
         }
 
         // Update user stats
+        console.log('Updating stats - gameType:', session.game_type, 'correctCount:', correctCount, 'totalQuestions:', answers?.length || 10);
         updateUserStats(db, req.userId, session.game_type, score, xpEarned, correctCount, answers?.length || 10);
 
         res.json({ message: 'Game session completed', sessionId: id });
@@ -475,6 +482,143 @@ function updateUserStats(db, userId, gameType, score, xpEarned, correctCount, to
         `).run(userId);
     } else if (user.last_played_date !== today) {
         db.prepare('UPDATE users SET current_streak = 1 WHERE id = ?').run(userId);
+    }
+
+    // Update achievement progress
+    try {
+        updateAchievementProgress(db, userId, gameType, correctCount, totalQuestions, score);
+    } catch (achErr) {
+        console.error('ERROR in updateAchievementProgress:', achErr);
+    }
+}
+
+/**
+ * Update achievement progress after game completion.
+ *
+ * @param {object} db - Database instance
+ * @param {number} userId - User ID
+ * @param {string} gameType - Type of game played
+ * @param {number} correctCount - Number of correct answers
+ * @param {number} totalQuestions - Total questions
+ * @param {number} score - Score achieved
+ */
+function updateAchievementProgress(db, userId, gameType, correctCount, totalQuestions, score) {
+    console.log('updateAchievementProgress called - gameType:', gameType, 'correctCount:', correctCount);
+    // Get all achievements
+    const achievements = db.prepare('SELECT * FROM achievements').all();
+    console.log('Found achievements:', achievements.length);
+
+    // For correct_count achievements, sync with actual total_correct from stats
+    // This ensures progress is always accurate
+    const userStats = db.prepare(
+        'SELECT category, total_correct, games_played FROM user_category_stats WHERE user_id = ?'
+    ).all(userId);
+    const statsMap = {};
+    for (const stat of userStats) {
+        statsMap[stat.category] = stat;
+    }
+
+    for (const achievement of achievements) {
+        let progressIncrement = 0;
+        let absoluteProgress = null; // For syncing with actual stats
+
+        switch (achievement.requirement_type) {
+            case 'correct_count':
+                // Category-specific correct answer tracking
+                // Use absolute progress from stats to stay in sync
+                if (achievement.category === 'flags' && statsMap.flags) {
+                    absoluteProgress = statsMap.flags.total_correct;
+                } else if (achievement.category === 'capitals' && statsMap.capitals) {
+                    absoluteProgress = statsMap.capitals.total_correct;
+                } else if (achievement.category === 'languages' && statsMap.languages) {
+                    absoluteProgress = statsMap.languages.total_correct;
+                }
+                break;
+            case 'games_played':
+                // Category-specific or general game completion
+                if (achievement.category === 'maps' && gameType === 'maps') {
+                    progressIncrement = 1;
+                } else if (achievement.category === 'general') {
+                    // First Steps - any game counts
+                    progressIncrement = 1;
+                }
+                break;
+            case 'high_score_games':
+                // Trivia Champion - 90% or higher in trivia games
+                if (gameType === 'trivia' && totalQuestions > 0) {
+                    const accuracy = correctCount / totalQuestions;
+                    if (accuracy >= 0.9) {
+                        progressIncrement = 1;
+                    }
+                }
+                break;
+            case 'perfect_game':
+                // Perfect Game - 100% accuracy
+                if (correctCount === totalQuestions && totalQuestions > 0) {
+                    progressIncrement = 1;
+                }
+                break;
+            case 'fast_answers':
+                // Speed Demon - handled separately with timing data
+                break;
+            case 'continents_played':
+                // World Traveler - needs region tracking
+                break;
+            case 'streak_days':
+                // Dedicated Learner - handled by streak update
+                break;
+            case 'win_streak':
+                // Winning Streak - handled by multiplayer
+                break;
+            case 'friends_count':
+                // Social Butterfly - handled by friends route
+                break;
+        }
+
+        // Handle absolute progress (sync with stats) or incremental progress
+        if (absoluteProgress !== null || progressIncrement > 0) {
+            const existing = db.prepare(
+                'SELECT * FROM user_achievements WHERE user_id = ? AND achievement_id = ?'
+            ).get(userId, achievement.id);
+
+            let newProgress;
+            if (absoluteProgress !== null) {
+                // Use absolute progress from stats (more accurate)
+                newProgress = Math.min(absoluteProgress, achievement.requirement_value);
+                console.log('Achievement', achievement.name, 'setting absolute progress to', newProgress);
+            } else {
+                // Use incremental progress
+                newProgress = Math.min(
+                    (existing?.progress || 0) + progressIncrement,
+                    achievement.requirement_value
+                );
+                console.log('Achievement', achievement.name, 'incrementing by', progressIncrement, 'to', newProgress);
+            }
+
+            const unlocked = newProgress >= achievement.requirement_value;
+
+            if (existing) {
+                db.prepare(`
+                    UPDATE user_achievements
+                    SET progress = ?,
+                        unlocked_at = CASE
+                            WHEN ? AND unlocked_at IS NULL THEN CURRENT_TIMESTAMP
+                            ELSE unlocked_at
+                        END
+                    WHERE user_id = ? AND achievement_id = ?
+                `).run(newProgress, unlocked ? 1 : 0, userId, achievement.id);
+            } else {
+                db.prepare(`
+                    INSERT INTO user_achievements (user_id, achievement_id, progress, unlocked_at)
+                    VALUES (?, ?, ?, ?)
+                `).run(
+                    userId,
+                    achievement.id,
+                    newProgress,
+                    unlocked ? new Date().toISOString() : null
+                );
+            }
+        }
     }
 }
 

@@ -41,6 +41,7 @@ function GamePlay() {
     const [selectedAnswer, setSelectedAnswer] = useState(null)
     const [showResult, setShowResult] = useState(false)
     const [error, setError] = useState(null)
+    const [sessionId, setSessionId] = useState(null)
 
     const timerRef = useRef(null)
     const pausedTimeRef = useRef(null)
@@ -49,7 +50,7 @@ function GamePlay() {
 
     const breadcrumbItems = [
         { label: 'Games', path: '/games' },
-        { label: formattedGameType, path: `/games/\${gameType}` },
+        { label: formattedGameType, path: `/games/${gameType}` },
         { label: 'Play', path: null }
     ]
 
@@ -57,12 +58,26 @@ function GamePlay() {
         try {
             setGameState('loading')
             setError(null)
-            const data = await api.get(`/games/questions?type=\${gameType}&count=\${TOTAL_QUESTIONS}`)
+            const data = await api.get(`/games/questions?type=${gameType}&count=${TOTAL_QUESTIONS}`)
 
             if (!data.questions || data.questions.length === 0) {
                 setError('No questions available for this game type. Please try another game.')
                 setGameState('error')
                 return
+            }
+
+            // Create a game session
+            if (user) {
+                try {
+                    const sessionData = await api.post('/games/sessions', {
+                        gameType,
+                        gameMode: 'solo',
+                        difficulty: 'medium'
+                    })
+                    setSessionId(sessionData.sessionId)
+                } catch (sessionErr) {
+                    console.error('Failed to create session:', sessionErr)
+                }
             }
 
             setQuestions(data.questions)
@@ -72,7 +87,7 @@ function GamePlay() {
             setError(err.message)
             setGameState('error')
         }
-    }, [gameType])
+    }, [gameType, user])
 
     useEffect(() => {
         loadQuestions()
@@ -105,6 +120,11 @@ function GamePlay() {
             clearInterval(timerRef.current)
         }
 
+        if (!currentQuestion) {
+            setGameState('finished')
+            return
+        }
+
         setStreak(0)
         setAnswers(prev => [...prev, {
             question: currentQuestion,
@@ -119,7 +139,7 @@ function GamePlay() {
     }
 
     const handleAnswer = (answer) => {
-        if (showResult || selectedAnswer !== null) return
+        if (showResult || selectedAnswer !== null || !currentQuestion) return
 
         if (timerRef.current) {
             clearInterval(timerRef.current)
@@ -152,8 +172,36 @@ function GamePlay() {
         setTimeout(moveToNext, 1500)
     }
 
-    const moveToNext = () => {
+    const moveToNext = async () => {
         if (currentIndex >= questions.length - 1) {
+            // Game finished - save the session
+            if (sessionId && user) {
+                const correctCount = answers.filter(a => a.isCorrect).length + (selectedAnswer === currentQuestion?.correctAnswer ? 1 : 0)
+                const totalAnswers = answers.length + 1
+                const avgTimeMs = Math.round(
+                    [...answers, { timeMs: (QUESTION_TIME - timeLeft) * 1000 }]
+                        .reduce((sum, a) => sum + a.timeMs, 0) / totalAnswers
+                )
+                const xpEarned = Math.round(score * 0.1)
+
+                try {
+                    await api.patch(`/games/sessions/${sessionId}`, {
+                        score,
+                        xpEarned,
+                        correctCount,
+                        averageTimeMs: avgTimeMs,
+                        answers: [...answers, {
+                            question: currentQuestion,
+                            userAnswer: selectedAnswer,
+                            correctAnswer: currentQuestion?.correctAnswer,
+                            isCorrect: selectedAnswer === currentQuestion?.correctAnswer,
+                            timeMs: (QUESTION_TIME - timeLeft) * 1000
+                        }]
+                    })
+                } catch (saveErr) {
+                    console.error('Failed to save session:', saveErr)
+                }
+            }
             setGameState('finished')
             return
         }
@@ -188,6 +236,7 @@ function GamePlay() {
         setSelectedAnswer(null)
         setShowResult(false)
         setIsPaused(false)
+        setSessionId(null)
         loadQuestions()
     }
 
@@ -281,6 +330,17 @@ function GamePlay() {
         )
     }
 
+    // Guard against undefined currentQuestion during state transitions
+    if (!currentQuestion) {
+        return (
+            <div className="page">
+                <div className="card">
+                    <p className="text-secondary">Loading next question...</p>
+                </div>
+            </div>
+        )
+    }
+
     return (
         <div className="page">
             <div className={styles.gameHeader}>
@@ -299,7 +359,7 @@ function GamePlay() {
             <div className={styles.timerBar}>
                 <div
                     className={styles.timerFill}
-                    style={{ width: `\${(timeLeft / QUESTION_TIME) * 100}%` }}
+                    style={{ width: `${(timeLeft / QUESTION_TIME) * 100}%` }}
                 />
             </div>
 
@@ -335,12 +395,12 @@ function GamePlay() {
                 {currentQuestion.options?.map((option, idx) => (
                     <button
                         key={idx}
-                        className={`\${styles.optionButton} \${getOptionClass(option)}`}
+                        className={`${styles.optionButton} ${getOptionClass(option)}`}
                         onClick={() => handleAnswer(option)}
                         disabled={showResult}
                     >
                         {option?.startsWith('http') ? (
-                            <img src={option} alt={`Option \${idx + 1}`} className={styles.optionImage} />
+                            <img src={option} alt={`Option ${idx + 1}`} className={styles.optionImage} />
                         ) : (
                             option
                         )}
