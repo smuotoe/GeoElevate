@@ -10,6 +10,8 @@ const GAME_TYPES = [
     { id: 'trivia', name: 'Trivia', icon: '&#128161;', description: 'Geography facts and knowledge' },
 ]
 
+const FILTER_TABS = ['all', 'flags', 'capitals', 'maps', 'languages', 'trivia']
+
 /**
  * Games list page component.
  * Supports deep linking via /games/:gameType route parameter.
@@ -21,6 +23,7 @@ function Games() {
     const navigate = useNavigate()
     const { gameType } = useParams()
     const [showLoginPrompt, setShowLoginPrompt] = useState(false)
+    const [activeFilter, setActiveFilter] = useState('all')
     const cardRef = useRef(null)
 
     // Find the selected game if gameType is provided
@@ -28,8 +31,14 @@ function Games() {
         ? GAME_TYPES.find(game => game.id === gameType)
         : null
 
-    // Filter games to show - only selected game if gameType provided, otherwise all
-    const gamesToShow = selectedGame ? [selectedGame] : GAME_TYPES
+    // Filter games based on active filter tab or URL param
+    const getFilteredGames = () => {
+        if (selectedGame) return [selectedGame]
+        if (activeFilter === 'all') return GAME_TYPES
+        return GAME_TYPES.filter(game => game.id === activeFilter)
+    }
+
+    const gamesToShow = getFilteredGames()
 
     // Determine page title
     const pageTitle = selectedGame ? `${selectedGame.name} Game` : 'Games'
@@ -63,6 +72,22 @@ function Games() {
                     </Link>
                 )}
             </div>
+
+            {/* Category Filter Tabs - only show when not viewing specific game */}
+            {!selectedGame && (
+                <div className="tabs mb-md" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {FILTER_TABS.map(tab => (
+                        <button
+                            key={tab}
+                            className={`btn ${activeFilter === tab ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => setActiveFilter(tab)}
+                            style={{ textTransform: 'capitalize' }}
+                        >
+                            {tab}
+                        </button>
+                    ))}
+                </div>
+            )}
 
             {/* Login Prompt Modal for Guests */}
             {showLoginPrompt && (
@@ -131,8 +156,8 @@ function Games() {
                 </div>
             </section>
 
-            {/* Multiplayer Section - hidden when viewing specific game type */}
-            {!selectedGame && (
+            {/* Multiplayer Section - hidden when viewing specific game type or filtered */}
+            {!selectedGame && activeFilter === 'all' && (
                 <section className="mb-lg">
                     <h2 className="section-title mb-md">Multiplayer</h2>
                     <button
