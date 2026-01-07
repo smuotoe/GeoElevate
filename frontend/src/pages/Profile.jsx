@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { api } from '../utils/api'
 
 /**
  * Profile/Me page component.
@@ -10,6 +11,349 @@ import { useAuth } from '../context/AuthContext'
 function Profile() {
     const { user } = useAuth()
     const [activeTab, setActiveTab] = useState('performance')
+    const [stats, setStats] = useState(null)
+    const [achievements, setAchievements] = useState(null)
+    const [statsLoading, setStatsLoading] = useState(false)
+    const [achievementsLoading, setAchievementsLoading] = useState(false)
+    const [statsError, setStatsError] = useState(null)
+    const [achievementsError, setAchievementsError] = useState(null)
+
+    useEffect(() => {
+        if (activeTab === 'performance' && user?.id && !stats && !statsLoading) {
+            fetchStats()
+        }
+    }, [activeTab, user?.id, stats, statsLoading])
+
+    useEffect(() => {
+        if (activeTab === 'achievements' && user?.id && !achievements && !achievementsLoading) {
+            fetchAchievements()
+        }
+    }, [activeTab, user?.id, achievements, achievementsLoading])
+
+    /**
+     * Fetch user stats from API.
+     */
+    async function fetchStats() {
+        setStatsLoading(true)
+        setStatsError(null)
+        try {
+            const data = await api.get(`/users/${user.id}/stats`)
+            setStats(data)
+        } catch (err) {
+            setStatsError(err.message || 'Failed to load stats')
+        } finally {
+            setStatsLoading(false)
+        }
+    }
+
+    /**
+     * Fetch user achievements from API.
+     */
+    async function fetchAchievements() {
+        setAchievementsLoading(true)
+        setAchievementsError(null)
+        try {
+            const data = await api.get(`/users/${user.id}/achievements`)
+            setAchievements(data)
+        } catch (err) {
+            setAchievementsError(err.message || 'Failed to load achievements')
+        } finally {
+            setAchievementsLoading(false)
+        }
+    }
+
+    /**
+     * Calculate XP needed for next level.
+     *
+     * @param {number} level - Current level
+     * @returns {number} XP needed for next level
+     */
+    function getXpForLevel(level) {
+        return level * 100
+    }
+
+    /**
+     * Get category display name.
+     *
+     * @param {string} category - Category key
+     * @returns {string} Display name
+     */
+    function getCategoryName(category) {
+        const names = {
+            flags: 'Flags',
+            capitals: 'Capitals',
+            maps: 'Maps',
+            languages: 'Languages',
+            trivia: 'Trivia'
+        }
+        return names[category?.toLowerCase()] || category || 'Unknown'
+    }
+
+    /**
+     * Render skill category progress bar.
+     *
+     * @param {object} stat - Category stat object
+     * @returns {React.ReactElement} Progress bar element
+     */
+    function renderSkillBar(stat) {
+        const xpForNextLevel = getXpForLevel(stat.level)
+        const currentLevelXp = stat.xp % xpForNextLevel
+        const progress = xpForNextLevel > 0 ? (currentLevelXp / xpForNextLevel) * 100 : 0
+
+        return (
+            <div key={stat.category} style={{ marginBottom: '16px' }}>
+                <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    marginBottom: '4px'
+                }}>
+                    <span style={{ color: 'var(--text-primary)', fontWeight: '500' }}>
+                        {getCategoryName(stat.category)}
+                    </span>
+                    <span style={{ color: 'var(--text-secondary)' }}>
+                        Level {stat.level} - {currentLevelXp}/{xpForNextLevel} XP
+                    </span>
+                </div>
+                <div style={{
+                    height: '8px',
+                    backgroundColor: 'var(--surface)',
+                    borderRadius: '4px',
+                    overflow: 'hidden'
+                }}>
+                    <div style={{
+                        height: '100%',
+                        width: `${Math.min(progress, 100)}%`,
+                        backgroundColor: 'var(--primary)',
+                        borderRadius: '4px',
+                        transition: 'width 0.3s ease'
+                    }} />
+                </div>
+                <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    marginTop: '4px',
+                    fontSize: '12px',
+                    color: 'var(--text-secondary)'
+                }}>
+                    <span>{stat.games_played || 0} games</span>
+                    <span>{stat.total_correct || 0}/{stat.total_questions || 0} correct</span>
+                </div>
+            </div>
+        )
+    }
+
+    /**
+     * Render achievement badge.
+     *
+     * @param {object} achievement - Achievement object
+     * @returns {React.ReactElement} Badge element
+     */
+    function renderAchievementBadge(achievement) {
+        const isUnlocked = achievement.unlocked_at !== null
+        const progress = achievement.progress || 0
+        const progressPercent = achievement.requirement_value > 0
+            ? Math.min((progress / achievement.requirement_value) * 100, 100)
+            : 0
+
+        return (
+            <div
+                key={achievement.id}
+                style={{
+                    padding: '16px',
+                    backgroundColor: 'var(--surface)',
+                    borderRadius: '8px',
+                    opacity: isUnlocked ? 1 : 0.6,
+                    border: isUnlocked ? '2px solid var(--primary)' : '2px solid transparent'
+                }}
+            >
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    marginBottom: '8px'
+                }}>
+                    <div style={{
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: '50%',
+                        backgroundColor: isUnlocked ? 'var(--primary)' : 'var(--text-secondary)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '24px',
+                        filter: isUnlocked ? 'none' : 'grayscale(100%)'
+                    }}>
+                        {achievement.icon || '?'}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                        <div style={{
+                            color: 'var(--text-primary)',
+                            fontWeight: '600'
+                        }}>
+                            {achievement.name}
+                        </div>
+                        <div style={{
+                            color: 'var(--text-secondary)',
+                            fontSize: '12px'
+                        }}>
+                            {achievement.description}
+                        </div>
+                    </div>
+                </div>
+                {!isUnlocked && (
+                    <div>
+                        <div style={{
+                            height: '4px',
+                            backgroundColor: 'var(--text-secondary)',
+                            borderRadius: '2px',
+                            overflow: 'hidden',
+                            marginBottom: '4px'
+                        }}>
+                            <div style={{
+                                height: '100%',
+                                width: `${progressPercent}%`,
+                                backgroundColor: 'var(--primary)',
+                                borderRadius: '2px'
+                            }} />
+                        </div>
+                        <div style={{
+                            fontSize: '11px',
+                            color: 'var(--text-secondary)',
+                            textAlign: 'right'
+                        }}>
+                            {progress}/{achievement.requirement_value}
+                        </div>
+                    </div>
+                )}
+                {isUnlocked && (
+                    <div style={{
+                        fontSize: '11px',
+                        color: 'var(--primary)',
+                        textAlign: 'right'
+                    }}>
+                        +{achievement.xp_reward} XP
+                    </div>
+                )}
+            </div>
+        )
+    }
+
+    /**
+     * Render performance tab content.
+     *
+     * @returns {React.ReactElement} Performance content
+     */
+    function renderPerformanceTab() {
+        if (statsLoading) {
+            return (
+                <div style={{ textAlign: 'center', padding: '24px' }}>
+                    <p style={{ color: 'var(--text-secondary)' }}>Loading stats...</p>
+                </div>
+            )
+        }
+
+        if (statsError) {
+            return (
+                <div style={{ textAlign: 'center', padding: '24px' }}>
+                    <p style={{ color: 'var(--text-secondary)' }}>{statsError}</p>
+                    <button className="btn btn-secondary mt-md" onClick={fetchStats}>
+                        Retry
+                    </button>
+                </div>
+            )
+        }
+
+        const categoryStats = stats?.stats || []
+        const defaultCategories = ['flags', 'capitals', 'maps', 'languages', 'trivia']
+
+        if (categoryStats.length === 0) {
+            const placeholderStats = defaultCategories.map(cat => ({
+                category: cat,
+                xp: 0,
+                level: 1,
+                games_played: 0,
+                total_correct: 0,
+                total_questions: 0
+            }))
+            return (
+                <div>
+                    <p style={{
+                        color: 'var(--text-secondary)',
+                        marginBottom: '16px'
+                    }}>
+                        Play games to start building your skills!
+                    </p>
+                    {placeholderStats.map(renderSkillBar)}
+                </div>
+            )
+        }
+
+        return <div>{categoryStats.map(renderSkillBar)}</div>
+    }
+
+    /**
+     * Render achievements tab content.
+     *
+     * @returns {React.ReactElement} Achievements content
+     */
+    function renderAchievementsTab() {
+        if (achievementsLoading) {
+            return (
+                <div style={{ textAlign: 'center', padding: '24px' }}>
+                    <p style={{ color: 'var(--text-secondary)' }}>Loading achievements...</p>
+                </div>
+            )
+        }
+
+        if (achievementsError) {
+            return (
+                <div style={{ textAlign: 'center', padding: '24px' }}>
+                    <p style={{ color: 'var(--text-secondary)' }}>{achievementsError}</p>
+                    <button className="btn btn-secondary mt-md" onClick={fetchAchievements}>
+                        Retry
+                    </button>
+                </div>
+            )
+        }
+
+        const achievementList = achievements?.achievements || []
+
+        if (achievementList.length === 0) {
+            return (
+                <div style={{ textAlign: 'center', padding: '24px' }}>
+                    <p style={{ color: 'var(--text-secondary)' }}>
+                        No achievements available yet. Check back later!
+                    </p>
+                    <Link to="/achievements" className="btn btn-secondary mt-md">
+                        View All Achievements
+                    </Link>
+                </div>
+            )
+        }
+
+        const unlockedCount = achievementList.filter(a => a.unlocked_at !== null).length
+
+        return (
+            <div>
+                <div style={{
+                    marginBottom: '16px',
+                    color: 'var(--text-secondary)'
+                }}>
+                    {unlockedCount}/{achievementList.length} unlocked
+                </div>
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                    gap: '12px'
+                }}>
+                    {achievementList.map(renderAchievementBadge)}
+                </div>
+                <Link to="/achievements" className="btn btn-secondary mt-md">
+                    View All Achievements
+                </Link>
+            </div>
+        )
+    }
 
     return (
         <div className="page">
@@ -68,22 +412,7 @@ function Profile() {
             </div>
 
             <div className="card">
-                {activeTab === 'performance' ? (
-                    <div>
-                        <p className="text-secondary">
-                            Your skill levels across all categories will be displayed here.
-                        </p>
-                    </div>
-                ) : (
-                    <div>
-                        <p className="text-secondary">
-                            Your achievements and badges will be displayed here.
-                        </p>
-                        <Link to="/achievements" className="btn btn-secondary mt-md">
-                            View All Achievements
-                        </Link>
-                    </div>
-                )}
+                {activeTab === 'performance' ? renderPerformanceTab() : renderAchievementsTab()}
             </div>
 
             <Link to="/friends" className="card mt-md" style={{ display: 'block', textDecoration: 'none' }}>
