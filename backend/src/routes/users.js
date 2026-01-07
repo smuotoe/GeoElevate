@@ -2,8 +2,19 @@ import { Router } from 'express';
 import { getDb } from '../models/database.js';
 import { authenticate } from '../middleware/auth.js';
 import bcrypt from 'bcryptjs';
+import { fileURLToPath } from 'url';
+import path from 'path';
+import fs from 'fs';
 
 const router = Router();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Avatar upload configuration
+const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+const AVATARS_DIR = path.join(__dirname, '../../public/avatars');
 
 /**
  * Get user by ID.
@@ -204,6 +215,134 @@ router.get('/:id/game-history', authenticate, (req, res, next) => {
         ).get(id);
 
         res.json({ games, total: total.count });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/**
+ * Upload user avatar.
+ * POST /api/users/:id/avatar
+ * Expects multipart/form-data with 'avatar' field
+ */
+router.post('/:id/avatar', authenticate, async (req, res, next) => {
+    try {
+        const { id } = req.params;
+
+        // Can only update own avatar
+        if (parseInt(id) !== req.userId) {
+            return res.status(403).json({
+                error: { message: 'Cannot update another user\'s avatar' }
+            });
+        }
+
+        // Check content type
+        const contentType = req.headers['content-type'] || '';
+        if (!contentType.includes('multipart/form-data')) {
+            return res.status(400).json({
+                error: { message: 'Content-Type must be multipart/form-data' }
+            });
+        }
+
+        // Parse multipart data manually (simplified for base64 approach)
+        // For production, use multer or busboy
+        const chunks = [];
+        let totalSize = 0;
+
+        req.on('data', (chunk) => {
+            totalSize += chunk.length;
+            if (totalSize > MAX_FILE_SIZE) {
+                req.destroy();
+                return res.status(400).json({
+                    error: { message: `File too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB` }
+                });
+            }
+            chunks.push(chunk);
+        });
+
+        req.on('end', async () => {
+            try {
+                const body = Buffer.concat(chunks).toString();
+
+                // Extract boundary from content-type
+                const boundaryMatch = contentType.match(/boundary=(.+)/);
+                if (!boundaryMatch) {
+                    return res.status(400).json({
+                        error: { message: 'Invalid multipart data' }
+                    });
+                }
+
+                const boundary = boundaryMatch[1];
+                const parts = body.split(`--${boundary}`);
+
+                // Find the file part
+                let fileData = null;
+                let fileName = null;
+                let mimeType = null;
+
+                for (const part of parts) {
+                    if (part.includes('filename=')) {
+                        const nameMatch = part.match(/filename="([^"]+)"/);
+                        const typeMatch = part.match(/Content-Type:\s*([^\r\n]+)/i);
+
+                        if (nameMatch) fileName = nameMatch[1];
+                        if (typeMatch) mimeType = typeMatch[1].trim();
+
+                        // Extract binary data after headers
+                        const headerEnd = part.indexOf('\r\n\r\n');
+                        if (headerEnd !== -1) {
+                            fileData = part.slice(headerEnd + 4);
+                            // Remove trailing boundary markers
+                            fileData = fileData.replace(/\r\n--$/, '').replace(/--\r\n$/, '').trim();
+                        }
+                        break;
+                    }
+                }
+
+                if (!fileData || !fileName) {
+                    return res.status(400).json({
+                        error: { message: 'No file uploaded' }
+                    });
+                }
+
+                // Validate file type
+                if (!mimeType || !ALLOWED_TYPES.includes(mimeType)) {
+                    return res.status(400).json({
+                        error: { message: `Invalid file type. Allowed types: ${ALLOWED_TYPES.map(t => t.split('/')[1]).join(', ')}` }
+                    });
+                }
+
+                // Ensure avatars directory exists
+                if (!fs.existsSync(AVATARS_DIR)) {
+                    fs.mkdirSync(AVATARS_DIR, { recursive: true });
+                }
+
+                // Generate unique filename
+                const ext = mimeType.split('/')[1].replace('jpeg', 'jpg');
+                const avatarFileName = `${id}_${Date.now()}.${ext}`;
+                const avatarPath = path.join(AVATARS_DIR, avatarFileName);
+
+                // Write file
+                fs.writeFileSync(avatarPath, fileData, 'binary');
+
+                // Update user's avatar_url in database
+                const avatarUrl = `/avatars/${avatarFileName}`;
+                const db = getDb();
+                db.prepare('UPDATE users SET avatar_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+                    .run(avatarUrl, id);
+
+                res.json({
+                    message: 'Avatar uploaded successfully',
+                    avatar_url: avatarUrl
+                });
+            } catch (parseErr) {
+                next(parseErr);
+            }
+        });
+
+        req.on('error', (err) => {
+            next(err);
+        });
     } catch (err) {
         next(err);
     }

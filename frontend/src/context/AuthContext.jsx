@@ -73,14 +73,12 @@ export function AuthProvider({ children }) {
      * @returns {object} Login result
      */
     async function login(email, password) {
-        dispatch({ type: 'SET_LOADING', payload: true })
         try {
             const response = await api.post('/auth/login', { email, password })
             localStorage.setItem('accessToken', response.accessToken)
             dispatch({ type: 'SET_USER', payload: response.user })
             return { success: true }
         } catch (error) {
-            dispatch({ type: 'SET_ERROR', payload: error.message })
             return { success: false, error: error.message }
         }
     }
@@ -94,14 +92,12 @@ export function AuthProvider({ children }) {
      * @returns {object} Registration result
      */
     async function register(email, username, password) {
-        dispatch({ type: 'SET_LOADING', payload: true })
         try {
             const response = await api.post('/auth/register', { email, username, password })
             localStorage.setItem('accessToken', response.accessToken)
             dispatch({ type: 'SET_USER', payload: response.user })
             return { success: true }
         } catch (error) {
-            dispatch({ type: 'SET_ERROR', payload: error.message })
             return { success: false, error: error.message }
         }
     }

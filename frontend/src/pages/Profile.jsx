@@ -1,7 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../utils/api'
+import Modal from '../components/Modal'
+
+// Avatar upload configuration
+const MAX_FILE_SIZE = 2 * 1024 * 1024 // 2MB
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 
 /**
  * Profile/Me page component.
@@ -9,7 +14,7 @@ import { api } from '../utils/api'
  * @returns {React.ReactElement} Profile page
  */
 function Profile() {
-    const { user } = useAuth()
+    const { user, checkAuth } = useAuth()
     const [activeTab, setActiveTab] = useState('performance')
     const [stats, setStats] = useState(null)
     const [achievements, setAchievements] = useState(null)
@@ -17,12 +22,17 @@ function Profile() {
     const [achievementsLoading, setAchievementsLoading] = useState(false)
     const [statsError, setStatsError] = useState(null)
     const [achievementsError, setAchievementsError] = useState(null)
+    const [selectedAchievement, setSelectedAchievement] = useState(null)
+    const [avatarUploading, setAvatarUploading] = useState(false)
+    const [avatarError, setAvatarError] = useState(null)
+    const fileInputRef = useRef(null)
 
+    // Fetch stats on mount and when user changes
     useEffect(() => {
-        if (activeTab === 'performance' && user?.id && !stats && !statsLoading) {
+        if (user?.id) {
             fetchStats()
         }
-    }, [activeTab, user?.id, stats, statsLoading])
+    }, [user?.id])
 
     useEffect(() => {
         if (activeTab === 'achievements' && user?.id && !achievements && !achievementsLoading) {
@@ -59,6 +69,63 @@ function Profile() {
             setAchievementsError(err.message || 'Failed to load achievements')
         } finally {
             setAchievementsLoading(false)
+        }
+    }
+
+    /**
+     * Handle avatar file selection and upload.
+     *
+     * @param {Event} e - File input change event
+     */
+    async function handleAvatarChange(e) {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        setAvatarError(null)
+
+        // Client-side validation for file size
+        if (file.size > MAX_FILE_SIZE) {
+            setAvatarError(`File too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB`)
+            return
+        }
+
+        // Client-side validation for file type
+        if (!ALLOWED_TYPES.includes(file.type)) {
+            setAvatarError(`Invalid file type. Allowed types: ${ALLOWED_TYPES.map(t => t.split('/')[1]).join(', ')}`)
+            return
+        }
+
+        setAvatarUploading(true)
+        try {
+            const formData = new FormData()
+            formData.append('avatar', file)
+
+            const token = localStorage.getItem('accessToken')
+            const response = await fetch(`/api/users/${user.id}/avatar`, {
+                method: 'POST',
+                headers: {
+                    ...(token && { Authorization: `Bearer ${token}` }),
+                },
+                body: formData,
+                credentials: 'include',
+            })
+
+            const data = await response.json()
+
+            if (!response.ok) {
+                throw new Error(data.error?.message || 'Upload failed')
+            }
+
+            // Refresh user data to get new avatar
+            await checkAuth()
+        } catch (err) {
+            setAvatarError(err.message || 'Failed to upload avatar')
+        } finally {
+            setAvatarUploading(false)
+            // Reset file input
+            if (fileInputRef.current) {
+                fileInputRef.current.value = ''
+            }
         }
     }
 
@@ -136,7 +203,14 @@ function Profile() {
                     color: 'var(--text-secondary)'
                 }}>
                     <span>{stat.games_played || 0} games</span>
-                    <span>{stat.total_correct || 0}/{stat.total_questions || 0} correct</span>
+                    <span>
+                        {stat.high_score > 0 && (
+                            <span style={{ color: 'var(--accent)', marginRight: '8px' }}>
+                                High: {stat.high_score}
+                            </span>
+                        )}
+                        {stat.total_correct || 0}/{stat.total_questions || 0} correct
+                    </span>
                 </div>
             </div>
         )
@@ -156,14 +230,18 @@ function Profile() {
             : 0
 
         return (
-            <div
+            <button
                 key={achievement.id}
+                onClick={() => setSelectedAchievement(achievement)}
                 style={{
                     padding: '16px',
                     backgroundColor: 'var(--surface)',
                     borderRadius: '8px',
                     opacity: isUnlocked ? 1 : 0.6,
-                    border: isUnlocked ? '2px solid var(--primary)' : '2px solid transparent'
+                    border: isUnlocked ? '2px solid var(--primary)' : '2px solid transparent',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    width: '100%'
                 }}
             >
                 <div style={{
@@ -234,7 +312,99 @@ function Profile() {
                         +{achievement.xp_reward} XP
                     </div>
                 )}
-            </div>
+            </button>
+        )
+    }
+
+    /**
+     * Render achievement detail modal content.
+     *
+     * @returns {React.ReactElement|null} Modal content or null
+     */
+    function renderAchievementModal() {
+        if (!selectedAchievement) return null
+
+        const isUnlocked = selectedAchievement.unlocked_at !== null
+        const progress = selectedAchievement.progress || 0
+        const progressPercent = selectedAchievement.requirement_value > 0
+            ? Math.min((progress / selectedAchievement.requirement_value) * 100, 100)
+            : 0
+
+        return (
+            <Modal
+                isOpen={!!selectedAchievement}
+                onClose={() => setSelectedAchievement(null)}
+                title={selectedAchievement.name}
+            >
+                <div style={{ textAlign: 'center' }}>
+                    <div style={{
+                        width: '80px',
+                        height: '80px',
+                        borderRadius: '50%',
+                        backgroundColor: isUnlocked ? 'var(--primary)' : 'var(--text-secondary)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '40px',
+                        margin: '0 auto 16px',
+                        filter: isUnlocked ? 'none' : 'grayscale(100%)'
+                    }}>
+                        {selectedAchievement.icon || '?'}
+                    </div>
+
+                    <p style={{
+                        color: 'var(--text-secondary)',
+                        marginBottom: '16px'
+                    }}>
+                        {selectedAchievement.description}
+                    </p>
+
+                    <div style={{
+                        backgroundColor: 'var(--surface)',
+                        padding: '16px',
+                        borderRadius: '8px',
+                        marginBottom: '16px'
+                    }}>
+                        <div style={{ marginBottom: '8px' }}>
+                            <strong>Category:</strong> {selectedAchievement.category}
+                        </div>
+                        <div style={{ marginBottom: '8px' }}>
+                            <strong>Reward:</strong> {selectedAchievement.xp_reward} XP
+                        </div>
+                        <div>
+                            <strong>Status:</strong> {isUnlocked ? 'Unlocked!' : 'Locked'}
+                        </div>
+                    </div>
+
+                    {!isUnlocked && (
+                        <div>
+                            <div style={{ marginBottom: '8px', fontWeight: '500' }}>
+                                Progress: {progress}/{selectedAchievement.requirement_value}
+                            </div>
+                            <div style={{
+                                height: '12px',
+                                backgroundColor: 'var(--text-secondary)',
+                                borderRadius: '6px',
+                                overflow: 'hidden'
+                            }}>
+                                <div style={{
+                                    height: '100%',
+                                    width: `${progressPercent}%`,
+                                    backgroundColor: 'var(--primary)',
+                                    borderRadius: '6px',
+                                    transition: 'width 0.3s ease'
+                                }} />
+                            </div>
+                        </div>
+                    )}
+
+                    {isUnlocked && selectedAchievement.unlocked_at && (
+                        <div style={{ color: 'var(--primary)', marginTop: '8px' }}>
+                            Unlocked on {new Date(selectedAchievement.unlocked_at).toLocaleDateString()}
+                        </div>
+                    )}
+                </div>
+            </Modal>
         )
     }
 
@@ -365,22 +535,70 @@ function Profile() {
             </div>
 
             <div className="card mb-md" style={{ textAlign: 'center' }}>
-                <div
-                    className="avatar"
-                    style={{
-                        width: 80,
-                        height: 80,
-                        borderRadius: '50%',
-                        background: 'var(--primary)',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '32px',
-                        marginBottom: '12px'
-                    }}
-                >
-                    {user?.username?.[0]?.toUpperCase() || '?'}
+                <div style={{ position: 'relative', display: 'inline-block', marginBottom: '12px' }}>
+                    {user?.avatar_url && !user.avatar_url.includes('default') ? (
+                        <img
+                            src={user.avatar_url}
+                            alt={user.username}
+                            style={{
+                                width: 80,
+                                height: 80,
+                                borderRadius: '50%',
+                                objectFit: 'cover'
+                            }}
+                        />
+                    ) : (
+                        <div
+                            className="avatar"
+                            style={{
+                                width: 80,
+                                height: 80,
+                                borderRadius: '50%',
+                                background: 'var(--primary)',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '32px'
+                            }}
+                        >
+                            {user?.username?.[0]?.toUpperCase() || '?'}
+                        </div>
+                    )}
+                    <button
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={avatarUploading}
+                        style={{
+                            position: 'absolute',
+                            bottom: 0,
+                            right: 0,
+                            width: 28,
+                            height: 28,
+                            borderRadius: '50%',
+                            background: 'var(--bg-secondary)',
+                            border: '2px solid var(--bg-primary)',
+                            cursor: avatarUploading ? 'wait' : 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '14px'
+                        }}
+                        title="Change avatar"
+                    >
+                        {avatarUploading ? '...' : '📷'}
+                    </button>
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/gif,image/webp"
+                        onChange={handleAvatarChange}
+                        style={{ display: 'none' }}
+                    />
                 </div>
+                {avatarError && (
+                    <p style={{ color: 'var(--color-error)', fontSize: '14px', marginBottom: '8px' }}>
+                        {avatarError}
+                    </p>
+                )}
                 <h2>{user?.username}</h2>
                 <p className="text-secondary">Level {user?.overall_level || 1}</p>
 
@@ -419,6 +637,8 @@ function Profile() {
                 <h3 style={{ color: 'var(--text-primary)' }}>Friends</h3>
                 <p className="text-secondary">View and manage your friends</p>
             </Link>
+
+            {renderAchievementModal()}
         </div>
     )
 }
