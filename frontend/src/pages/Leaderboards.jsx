@@ -17,6 +17,18 @@ const GAME_TYPES = [
 const VALID_TABS = ['global', 'weekly', 'friends']
 const VALID_GAME_TYPES = GAME_TYPES.map(t => t.id)
 
+function parseAvatarData(avatarUrl) {
+    if (!avatarUrl) return null
+    try {
+        if (avatarUrl.startsWith('{')) {
+            return JSON.parse(avatarUrl)
+        }
+    } catch {
+        return null
+    }
+    return null
+}
+
 /**
  * Leaderboards page component.
  *
@@ -214,13 +226,24 @@ function Leaderboards() {
                                     )}
                                 </div>
                                 <div className={styles.avatar}>
-                                    {entry.avatar_url ? (
-                                        <img src={entry.avatar_url} alt={entry.username} />
-                                    ) : (
-                                        <div className={styles.avatarPlaceholder}>
-                                            {entry.username?.charAt(0).toUpperCase()}
-                                        </div>
-                                    )}
+                                    {(() => {
+                                        const avatarData = parseAvatarData(entry.avatar_url)
+                                        if (avatarData && avatarData.emoji) {
+                                            return (
+                                                <div className={styles.avatarEmoji} style={{ backgroundColor: avatarData.color || 'var(--primary)' }}>
+                                                    {avatarData.emoji}
+                                                </div>
+                                            )
+                                        }
+                                        if (entry.avatar_url && !entry.avatar_url.startsWith('{')) {
+                                            return <img src={entry.avatar_url} alt={entry.username} />
+                                        }
+                                        return (
+                                            <div className={styles.avatarPlaceholder}>
+                                                {entry.username?.charAt(0).toUpperCase()}
+                                            </div>
+                                        )
+                                    })()}
                                 </div>
                                 <div className={styles.userInfo}>
                                     <span className={styles.username}>{entry.username}</span>

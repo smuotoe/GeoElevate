@@ -3,10 +3,30 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../utils/api'
 import Modal from '../components/Modal'
+import AvatarSelector from '../components/AvatarSelector'
 
 // Avatar upload configuration
 const MAX_FILE_SIZE = 2 * 1024 * 1024 // 2MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+
+/**
+ * Parse avatar data from avatar_url field.
+ * Returns parsed JSON object if avatar_url contains JSON data, otherwise null.
+ *
+ * @param {string|null} avatarUrl - The avatar URL or JSON string
+ * @returns {object|null} Parsed avatar data or null
+ */
+function parseAvatarData(avatarUrl) {
+    if (!avatarUrl) return null
+    try {
+        if (avatarUrl.startsWith('{')) {
+            return JSON.parse(avatarUrl)
+        }
+    } catch {
+        return null
+    }
+    return null
+}
 
 /**
  * Profile/Me page component.
@@ -25,6 +45,7 @@ function Profile() {
     const [selectedAchievement, setSelectedAchievement] = useState(null)
     const [avatarUploading, setAvatarUploading] = useState(false)
     const [avatarError, setAvatarError] = useState(null)
+    const [showAvatarSelector, setShowAvatarSelector] = useState(false)
     const fileInputRef = useRef(null)
 
     // Fetch stats on mount and when user changes
@@ -69,6 +90,25 @@ function Profile() {
             setAchievementsError(err.message || 'Failed to load achievements')
         } finally {
             setAchievementsLoading(false)
+        }
+    }
+
+    /**
+     * Handle avatar selection from avatar selector modal.
+     *
+     * @param {object} avatar - Selected avatar object with id, emoji, and color
+     */
+    async function handleAvatarSelect(avatar) {
+        setAvatarError(null)
+        setAvatarUploading(true)
+        try {
+            const avatarData = JSON.stringify(avatar)
+            await api.patch(`/users/${user.id}`, { avatar_url: avatarData })
+            await checkAuth()
+        } catch (err) {
+            setAvatarError(err.message || 'Failed to save avatar')
+        } finally {
+            setAvatarUploading(false)
         }
     }
 
@@ -127,6 +167,72 @@ function Profile() {
                 fileInputRef.current.value = ''
             }
         }
+    }
+
+    /**
+     * Render the user's avatar based on avatar_url content.
+     * Handles JSON emoji avatars, URL-based images, and default letter avatars.
+     *
+     * @returns {React.ReactElement} Avatar element
+     */
+    function renderAvatar() {
+        const avatarData = parseAvatarData(user?.avatar_url)
+
+        // JSON emoji avatar
+        if (avatarData && avatarData.emoji && avatarData.color) {
+            return (
+                <div
+                    className="avatar"
+                    style={{
+                        width: 80,
+                        height: 80,
+                        borderRadius: '50%',
+                        background: avatarData.color,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '40px'
+                    }}
+                >
+                    {avatarData.emoji}
+                </div>
+            )
+        }
+
+        // URL-based image avatar
+        if (user?.avatar_url && !user.avatar_url.includes('default') && !user.avatar_url.startsWith('{')) {
+            return (
+                <img
+                    src={user.avatar_url}
+                    alt={user.username}
+                    style={{
+                        width: 80,
+                        height: 80,
+                        borderRadius: '50%',
+                        objectFit: 'cover'
+                    }}
+                />
+            )
+        }
+
+        // Default letter avatar
+        return (
+            <div
+                className="avatar"
+                style={{
+                    width: 80,
+                    height: 80,
+                    borderRadius: '50%',
+                    background: 'var(--primary)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '32px'
+                }}
+            >
+                {user?.username?.[0]?.toUpperCase() || '?'}
+            </div>
+        )
     }
 
     /**
@@ -536,36 +642,9 @@ function Profile() {
 
             <div className="card mb-md" style={{ textAlign: 'center' }}>
                 <div style={{ position: 'relative', display: 'inline-block', marginBottom: '12px' }}>
-                    {user?.avatar_url && !user.avatar_url.includes('default') ? (
-                        <img
-                            src={user.avatar_url}
-                            alt={user.username}
-                            style={{
-                                width: 80,
-                                height: 80,
-                                borderRadius: '50%',
-                                objectFit: 'cover'
-                            }}
-                        />
-                    ) : (
-                        <div
-                            className="avatar"
-                            style={{
-                                width: 80,
-                                height: 80,
-                                borderRadius: '50%',
-                                background: 'var(--primary)',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: '32px'
-                            }}
-                        >
-                            {user?.username?.[0]?.toUpperCase() || '?'}
-                        </div>
-                    )}
+                    {renderAvatar()}
                     <button
-                        onClick={() => fileInputRef.current?.click()}
+                        onClick={() => setShowAvatarSelector(true)}
                         disabled={avatarUploading}
                         style={{
                             position: 'absolute',
@@ -639,6 +718,13 @@ function Profile() {
             </Link>
 
             {renderAchievementModal()}
+
+            <AvatarSelector
+                isOpen={showAvatarSelector}
+                onClose={() => setShowAvatarSelector(false)}
+                onSelect={handleAvatarSelect}
+                currentAvatar={parseAvatarData(user?.avatar_url)?.id}
+            />
         </div>
     )
 }
