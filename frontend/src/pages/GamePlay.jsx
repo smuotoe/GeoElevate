@@ -1,4 +1,15 @@
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
+import Breadcrumb from '../components/Breadcrumb'
+
+/**
+ * Format game type string with capitalized first letter.
+ *
+ * @param {string} gameType - The game type to format
+ * @returns {string} Formatted game type
+ */
+function formatGameType(gameType) {
+    return gameType.charAt(0).toUpperCase() + gameType.slice(1)
+}
 
 /**
  * Game play page component.
@@ -7,21 +18,21 @@ import { useParams, useNavigate } from 'react-router-dom'
  */
 function GamePlay() {
     const { gameType } = useParams()
-    const navigate = useNavigate()
+    const formattedGameType = formatGameType(gameType)
+
+    const breadcrumbItems = [
+        { label: 'Games', path: '/games' },
+        { label: formattedGameType, path: `/games/${gameType}` },
+        { label: 'Play', path: null }
+    ]
 
     return (
         <div className="page">
             <div className="page-header">
-                <button
-                    className="btn btn-secondary"
-                    onClick={() => navigate('/games')}
-                >
-                    Back
-                </button>
-                <h1 className="page-title" style={{ textTransform: 'capitalize' }}>
-                    {gameType}
+                <Breadcrumb items={breadcrumbItems} />
+                <h1 className="page-title">
+                    {formattedGameType}
                 </h1>
-                <div style={{ width: 60 }} />
             </div>
 
             <div className="card">
