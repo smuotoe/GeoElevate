@@ -124,13 +124,14 @@ router.post('/login', async (req, res, next) => {
         // Generic error message to prevent user enumeration
         const invalidCredentialsError = { error: { message: 'Invalid email or password' } };
 
-        if (!user) {
-            return res.status(401).json(invalidCredentialsError);
-        }
+        // Always perform password comparison to prevent timing attacks
+        // Use a dummy hash when user doesn't exist
+        const dummyHash = '$2a$10$dummyhashdummyhashdummyhashdummyhashdummyhashdu';
+        const passwordToCompare = user ? user.password_hash : dummyHash;
 
-        // Verify password
-        const isValidPassword = await bcrypt.compare(password, user.password_hash);
-        if (!isValidPassword) {
+        const isValidPassword = await bcrypt.compare(password, passwordToCompare);
+
+        if (!user || !isValidPassword) {
             return res.status(401).json(invalidCredentialsError);
         }
 
