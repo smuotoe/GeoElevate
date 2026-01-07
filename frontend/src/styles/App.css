@@ -160,8 +160,12 @@
     color: var(--text-secondary);
     font-size: 1.25rem;
     cursor: pointer;
-    padding: var(--spacing-xs);
-    min-height: auto;
+    padding: var(--spacing-sm);
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .modal-close:hover {
@@ -306,4 +310,42 @@
     border-radius: var(--radius-full);
     font-weight: 600;
     color: var(--accent);
+}
+
+/* Text truncation utility */
+.text-truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+
+/* Table responsive wrapper */
+.table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Responsive table styles */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 600px;
+}
+
+table th,
+table td {
+    padding: var(--spacing-sm) var(--spacing-md);
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+}
+
+table th {
+    background: var(--surface);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+table td {
+    white-space: nowrap;
 }

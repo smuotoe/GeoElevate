@@ -20,7 +20,7 @@
 }
 
 .modal {
-    background-color: var(--bg-secondary);
+    background-color: var(--surface);
     border-radius: 12px;
     box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
     max-width: 400px;
@@ -46,7 +46,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 16px 20px;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border);
 }
 
 .title {
@@ -63,13 +63,18 @@
     font-weight: bold;
     color: var(--text-secondary);
     cursor: pointer;
-    padding: 4px 8px;
+    padding: 8px;
     border-radius: 4px;
     transition: background-color 0.15s, color 0.15s;
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .closeButton:hover {
-    background-color: var(--bg-hover);
+    background-color: var(--background);
     color: var(--text-primary);
 }
 
