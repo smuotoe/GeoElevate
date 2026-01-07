@@ -1,0 +1,797 @@
+<project_specification>
+  <project_name>GeoElevate</project_name>
+
+  <overview>
+    A geography learning app inspired by Elevate's polished UX, featuring gamified quizzes about flags, capitals, maps, languages, and trivia. The app uses spaced repetition and smart question selection for optimal learning, with speed-based scoring and streak bonuses. Players can compete against friends in real-time multiplayer matches, track their progress across skill categories, climb global leaderboards, and unlock achievements - all wrapped in a smooth, app-store ready experience.
+  </overview>
+
+  <technology_stack>
+    <frontend>
+      <framework>React</framework>
+      <styling>CSS Modules with CSS Variables for theming</styling>
+      <state_management>React Context + useReducer</state_management>
+      <routing>React Router</routing>
+      <real_time>WebSocket client for multiplayer</real_time>
+    </frontend>
+    <backend>
+      <runtime>Node.js with Express</runtime>
+      <database>SQLite with better-sqlite3</database>
+      <real_time>WebSocket server (ws library) for multiplayer</real_time>
+      <authentication>JWT tokens with secure httpOnly cookies</authentication>
+    </backend>
+    <communication>
+      <api>REST API for CRUD operations</api>
+      <real_time>WebSocket for multiplayer game sync</real_time>
+    </communication>
+  </technology_stack>
+
+  <prerequisites>
+    <environment_setup>
+      Node.js 18+ installed
+      npm or yarn package manager
+      Modern browser with WebSocket support
+    </environment_setup>
+  </prerequisites>
+
+  <feature_count>302</feature_count>
+
+  <security_and_access_control>
+    <user_roles>
+      <role name="guest">
+        <permissions>
+          - Can play all solo games
+          - Can view global leaderboards
+          - Cannot participate in multiplayer
+          - Cannot save progress permanently
+          - Cannot add friends
+          - Cannot earn achievements
+        </permissions>
+      </role>
+      <role name="authenticated_user">
+        <permissions>
+          - All guest permissions plus:
+          - Can save progress and sync across devices
+          - Can participate in multiplayer with friends
+          - Can add/remove friends
+          - Can view activity feed
+          - Can earn and view achievements
+          - Can appear on leaderboards
+          - Can customize settings
+          - Can receive notifications
+        </permissions>
+      </role>
+    </user_roles>
+    <authentication>
+      <method>Email/password with optional social login</method>
+      <session_timeout>30 days (refresh token), 15 minutes (access token)</session_timeout>
+      <password_requirements>Minimum 8 characters, at least one letter and one number</password_requirements>
+    </authentication>
+    <multiplayer_security>
+      <server_authority>All game logic validated server-side</server_authority>
+      <anti_cheat>
+        - Answer validation on server only
+        - Timing verification (impossible response times rejected)
+        - Score calculation server-side
+        - Rate limiting on answer submissions
+      </anti_cheat>
+      <connection_security>
+        - Secure WebSocket (WSS) connections
+        - JWT token validation on WebSocket handshake
+        - Match session tokens to prevent replay attacks
+      </connection_security>
+    </multiplayer_security>
+    <sensitive_operations>
+      - Account deletion requires password confirmation
+      - Email change requires verification
+      - Password change requires current password
+    </sensitive_operations>
+  </security_and_access_control>
+
+  <core_features>
+    <authentication_and_onboarding>
+      - Guest play mode (no account required for solo)
+      - Email/password registration
+      - Login/logout functionality
+      - Password reset flow
+      - Initial skill assessment quiz (determines starting difficulty)
+      - Brief, fun tutorial walkthrough
+      - Profile setup (username, avatar selection)
+      - Session persistence
+    </authentication_and_onboarding>
+
+    <game_engine_core>
+      - Question display with timer countdown
+      - Multiple choice input (4 options)
+      - Typing input with fuzzy matching (Levenshtein distance threshold)
+      - Speed-based scoring (faster = more points)
+      - Streak/combo system (consecutive correct = bonus multiplier)
+      - Correct answer feedback (animation, sound, points display)
+      - Wrong answer feedback (show correct answer, move on)
+      - Pause menu (Resume, Restart, Quit, Game Instructions)
+      - Question progress indicator (e.g., "3 of 10")
+      - End-game summary screen
+      - Score + XP earned display
+      - Time breakdown (average answer time)
+      - Accuracy display (8/10 correct)
+      - Questions review (see which ones you got wrong)
+      - Comparison to personal best
+      - Leaderboard position change indicator
+      - Replay option
+      - Share results option
+    </game_engine_core>
+
+    <game_types>
+      <flags>
+        - Flag to Country (see flag, identify country)
+        - Country to Flag (see country, pick correct flag)
+        - Multiple choice and typing modes
+        - Regional filtering support
+      </flags>
+      <capitals>
+        - Country to Capital (see country, identify capital)
+        - Capital to Country (see capital, identify country)
+        - Multiple choice and typing modes
+        - Regional filtering support
+      </capitals>
+      <maps>
+        - Click on Country (given name, click correct location)
+        - Identify Highlighted Country (see highlighted area, name it)
+        - Interactive map component
+        - Regional filtering support
+      </maps>
+      <languages>
+        - Country to Language(s) (what languages are spoken in Switzerland?)
+        - Language to Countries (which countries speak Arabic?)
+        - Multiple choice and typing modes
+        - Regional filtering support
+      </languages>
+      <trivia>
+        - General geography facts (population, landmarks, currencies, etc.)
+        - Multiple choice and typing modes
+        - Varied question formats
+        - Regional filtering support
+      </trivia>
+    </game_types>
+
+    <difficulty_and_progression>
+      - Regional filtering (filter by continent/region)
+      - Difficulty scaling by country obscurity (major → obscure)
+      - Difficulty scaling by time pressure (more time → less time)
+      - Combined difficulty progression
+      - Spaced repetition algorithm for question scheduling
+      - Smart question selection (wrong answers appear more often)
+      - Individual fact tracking (each country/capital/flag tracked separately)
+      - XP caps per game type per day (encourages variety)
+      - Mastery indicators per fact
+    </difficulty_and_progression>
+
+    <profile_and_stats>
+      - User profile page
+      - Avatar display and selection
+      - Username display and editing
+      - Overall level/XP display
+      - Per-category skill levels (Flags, Capitals, Maps, Languages, Trivia)
+      - EPQ-style averaged score across categories
+      - Skill level tiers (Beginner, Intermediate, Advanced, Expert, Master, Elite)
+      - Progress bars per category
+      - High scores per game type
+      - Total games played
+      - Overall accuracy percentage
+      - Play history / recent games
+      - Time spent learning stats
+    </profile_and_stats>
+
+    <multiplayer_friends_only>
+      - Challenge friend to a match
+      - Select game type for challenge
+      - Match invitation system
+      - Accept/decline invitations
+      - Match lobby (waiting for opponent)
+      - Real-time synchronized gameplay
+      - Identical questions for both players
+      - 10 questions per match
+      - Short time limit per question (10-15 seconds)
+      - See when opponent has answered (indicator)
+      - Wait for both players before next question
+      - Real-time score updates
+      - Post-question result display (both answers shown briefly)
+      - Right/wrong indicators for both players
+      - Match end screen
+      - Final scores and winner announcement
+      - Question-by-question replay review
+      - Rematch option
+      - Return to lobby option
+    </multiplayer_friends_only>
+
+    <social_and_friends>
+      - Friends list page
+      - Add friend (by username or invite link)
+      - Remove friend
+      - View friend profiles
+      - See friend stats and skill levels
+      - Activity feed
+      - Friend beat your high score notifications
+      - Friend earned achievement notifications
+      - Friend challenge notifications
+      - Online/offline status indicators
+    </social_and_friends>
+
+    <leaderboards>
+      - Global all-time leaderboard (overall XP)
+      - Per-game-type leaderboards
+      - Weekly leaderboards
+      - Friends-only leaderboard filter
+      - Your rank display
+      - Top players display
+      - Leaderboard position change tracking
+    </leaderboards>
+
+    <daily_engagement>
+      - Daily streak tracking
+      - Streak display on home screen and profile
+      - Streak milestone celebrations
+      - Personalized daily challenges (based on weak areas)
+      - Challenge progress tracking
+      - Challenge completion rewards
+      - Streak recovery grace period (optional)
+    </daily_engagement>
+
+    <achievements>
+      - Achievements page
+      - Achievement categories
+      - Locked/unlocked states
+      - Progress tracking for progressive achievements
+      - Achievement unlock animations
+      - Achievement notifications
+      - Achievement examples:
+        - "Flag Master" - Identify 100 flags correctly
+        - "World Traveler" - Play games from all continents
+        - "Speed Demon" - Answer 10 questions in under 3 seconds each
+        - "Perfect Game" - Score 100% on any game
+        - "Social Butterfly" - Add 10 friends
+        - "Winning Streak" - Win 5 multiplayer matches in a row
+        - "Dedicated Learner" - Maintain a 30-day streak
+    </achievements>
+
+    <today_home_screen>
+      - Recommended games section (based on skill gaps, spaced repetition)
+      - Daily challenges progress cards
+      - Continue where you left off / recent games
+      - Pending multiplayer invites
+      - Streak status display prominently
+      - Quick-start buttons for favorite games
+    </today_home_screen>
+
+    <notifications>
+      - Push notification support
+      - Multiplayer challenge invites
+      - Match results notifications
+      - Streak reminder ("Don't lose your streak!")
+      - Daily challenge reminders
+      - Friend activity notifications (beat your score, etc.)
+      - Achievement unlock notifications
+      - Notification preferences (toggle each type)
+      - Notification history page
+    </notifications>
+
+    <settings>
+      - Sound effects on/off toggle
+      - Music on/off toggle
+      - Dark/light mode toggle
+      - Notification preferences (per notification type)
+      - Language preference (UI language)
+      - Account management (change email, password)
+      - Privacy settings
+      - Data export option
+      - Delete account option
+      - About/credits page
+      - Help/FAQ page
+    </settings>
+
+    <offline_mode>
+      - Offline solo gameplay
+      - Local question caching
+      - Local progress storage
+      - Sync queue for offline actions
+      - Automatic sync on reconnect
+      - Offline indicator in UI
+      - Graceful handling of connection loss
+    </offline_mode>
+
+    <ui_ux_polish>
+      - Smooth page transitions
+      - Loading states and skeletons
+      - Error states with retry options
+      - Empty states (no games played, no friends, etc.)
+      - Pull-to-refresh on mobile
+      - Responsive design (mobile-first)
+      - Haptic feedback on interactions (mobile)
+      - Satisfying animations for correct answers
+      - Celebration animations for achievements/milestones
+      - Dark theme as default (like Elevate)
+      - Light theme option
+      - Consistent color palette (teals, blues, accent colors)
+      - Clean typography
+      - Bottom navigation bar (Today, Leaderboards, Games, Notifications, Me)
+    </ui_ux_polish>
+  </core_features>
+
+  <database_schema>
+    <tables>
+      <users>
+        - id, email, username, password_hash, avatar_url
+        - created_at, updated_at, last_login_at
+        - is_guest, email_verified
+        - overall_xp, overall_level
+        - current_streak, longest_streak, last_played_date
+        - settings_json (sound, music, theme, notifications)
+      </users>
+
+      <user_category_stats>
+        - id, user_id, category (flags/capitals/maps/languages/trivia)
+        - xp, level, games_played, total_correct, total_questions
+        - high_score, average_time_ms
+        - created_at, updated_at
+      </user_category_stats>
+
+      <user_fact_progress>
+        - id, user_id, fact_type, fact_id
+        - times_seen, times_correct, times_wrong
+        - last_seen_at, next_review_at
+        - ease_factor, interval_days
+        - mastery_level
+      </user_fact_progress>
+
+      <game_sessions>
+        - id, user_id, game_type, game_mode (solo/multiplayer)
+        - score, xp_earned, correct_count, total_questions
+        - average_time_ms, started_at, completed_at
+        - difficulty_level, region_filter
+        - is_offline_sync
+      </game_sessions>
+
+      <game_answers>
+        - id, session_id, question_index
+        - question_data_json, user_answer, correct_answer
+        - is_correct, time_ms
+      </game_answers>
+
+      <multiplayer_matches>
+        - id, challenger_id, opponent_id
+        - game_type, status (pending/active/completed/cancelled)
+        - challenger_score, opponent_score, winner_id
+        - created_at, started_at, completed_at
+      </multiplayer_matches>
+
+      <multiplayer_answers>
+        - id, match_id, user_id, question_index
+        - question_data_json, user_answer, correct_answer
+        - is_correct, time_ms, answered_at
+      </multiplayer_answers>
+
+      <friendships>
+        - id, user_id, friend_id
+        - status (pending/accepted/blocked)
+        - created_at, accepted_at
+      </friendships>
+
+      <activity_feed>
+        - id, user_id, activity_type, target_user_id
+        - data_json (achievement_id, game_type, score, etc.)
+        - created_at
+      </activity_feed>
+
+      <achievements>
+        - id, name, description, icon, category
+        - requirement_type, requirement_value
+        - xp_reward
+      </achievements>
+
+      <user_achievements>
+        - id, user_id, achievement_id
+        - progress, unlocked_at
+      </user_achievements>
+
+      <daily_challenges>
+        - id, user_id, date
+        - challenge_type, target_value, current_value
+        - is_completed, xp_reward
+      </daily_challenges>
+
+      <notifications>
+        - id, user_id, type, title, body
+        - data_json, is_read, created_at
+      </notifications>
+
+      <leaderboard_snapshots>
+        - id, leaderboard_type, user_id
+        - score, rank, period_start, period_end
+        - created_at
+      </leaderboard_snapshots>
+
+      <geography_data>
+        - Countries table (id, name, code, continent, region, population, capital_id)
+        - Capitals table (id, name, country_id)
+        - Flags table (id, country_id, image_url)
+        - Languages table (id, name)
+        - Country_languages table (country_id, language_id, is_official)
+        - Trivia_facts table (id, category, question, answer, difficulty)
+      </geography_data>
+    </tables>
+  </database_schema>
+
+  <api_endpoints_summary>
+    <authentication>
+      - POST /api/auth/register
+      - POST /api/auth/login
+      - POST /api/auth/logout
+      - POST /api/auth/refresh
+      - POST /api/auth/forgot-password
+      - POST /api/auth/reset-password
+      - GET /api/auth/me
+    </authentication>
+
+    <users>
+      - GET /api/users/:id
+      - PATCH /api/users/:id
+      - DELETE /api/users/:id
+      - GET /api/users/:id/stats
+      - GET /api/users/:id/achievements
+      - GET /api/users/:id/game-history
+    </users>
+
+    <games>
+      - GET /api/games/types
+      - GET /api/games/questions?type=flags&mode=flag-to-country&region=europe&count=10
+      - POST /api/games/sessions (start a game)
+      - PATCH /api/games/sessions/:id (submit answers, complete game)
+      - GET /api/games/sessions/:id (get session details)
+    </games>
+
+    <multiplayer>
+      - POST /api/multiplayer/challenge (send challenge)
+      - GET /api/multiplayer/invites (pending invites)
+      - POST /api/multiplayer/invites/:id/accept
+      - POST /api/multiplayer/invites/:id/decline
+      - GET /api/multiplayer/matches/:id
+      - WebSocket /ws/match/:id (real-time game sync)
+    </multiplayer>
+
+    <friends>
+      - GET /api/friends
+      - POST /api/friends/request
+      - POST /api/friends/request/:id/accept
+      - POST /api/friends/request/:id/decline
+      - DELETE /api/friends/:id
+      - GET /api/friends/activity-feed
+    </friends>
+
+    <leaderboards>
+      - GET /api/leaderboards/global
+      - GET /api/leaderboards/game/:gameType
+      - GET /api/leaderboards/weekly
+      - GET /api/leaderboards/friends
+    </leaderboards>
+
+    <achievements>
+      - GET /api/achievements
+      - GET /api/achievements/user/:userId
+    </achievements>
+
+    <daily>
+      - GET /api/daily/challenges
+      - GET /api/daily/streak
+      - POST /api/daily/challenges/:id/progress
+    </daily>
+
+    <notifications>
+      - GET /api/notifications
+      - PATCH /api/notifications/:id/read
+      - PATCH /api/notifications/read-all
+      - GET /api/notifications/settings
+      - PATCH /api/notifications/settings
+    </notifications>
+
+    <settings>
+      - GET /api/settings
+      - PATCH /api/settings
+    </settings>
+
+    <sync>
+      - POST /api/sync/offline-data (sync offline progress)
+    </sync>
+  </api_endpoints_summary>
+
+  <ui_layout>
+    <main_structure>
+      Mobile-first responsive layout with bottom navigation bar
+      Five main tabs: Today, Leaderboards, Games, Notifications, Me
+      Dark theme default with optional light theme
+      Consistent header with context-specific actions
+    </main_structure>
+
+    <screens>
+      <today_screen>
+        - Header with streak flame, gift icon, notification bell
+        - Featured/Recommended games carousel
+        - Daily challenges cards with progress
+        - Recent games section
+        - Pending multiplayer invites
+      </today_screen>
+
+      <games_screen>
+        - Category filter tabs (All, Flags, Capitals, Maps, Languages, Trivia)
+        - A-Z sort option
+        - Random game shuffle button
+        - Game cards with: icon, name, high score, difficulty, ranking
+        - Favorite games section
+      </games_screen>
+
+      <game_play_screen>
+        - Score display (top left)
+        - Question counter (top center)
+        - Timer countdown (top right)
+        - Question/prompt area (center)
+        - Answer options or input field (bottom half)
+        - Streak indicator when active
+      </game_play_screen>
+
+      <multiplayer_match_screen>
+        - Both player avatars and names (top)
+        - Both player scores (updating in real-time)
+        - Question counter and timer
+        - Question display
+        - Answer options
+        - Opponent answered indicator
+        - Post-question result overlay (both answers shown)
+      </multiplayer_match_screen>
+
+      <leaderboards_screen>
+        - Tab toggle (Global, Weekly, Friends)
+        - Game type filter
+        - Leaderboard list with rank, avatar, name, score
+        - Your position highlighted/sticky
+      </leaderboards_screen>
+
+      <notifications_screen>
+        - Notification list with icons by type
+        - Unread indicator
+        - Tap to navigate to relevant screen
+        - Mark all read option
+      </notifications_screen>
+
+      <profile_me_screen>
+        - Avatar and username (top)
+        - Streak, XP, Level stats
+        - Performance tab with category skill bars (EPQ-style)
+        - Achievements tab with badges
+        - Settings gear icon
+      </profile_me_screen>
+
+      <friends_screen>
+        - Friends list with online status
+        - Add friend button
+        - Friend requests section
+        - Tap friend to view profile or challenge
+      </friends_screen>
+
+      <settings_screen>
+        - Sound/Music toggles
+        - Theme toggle (Dark/Light)
+        - Notification preferences
+        - Account section (email, password)
+        - Privacy & Data section
+        - Help/FAQ
+        - About
+        - Logout/Delete account
+      </settings_screen>
+    </screens>
+  </ui_layout>
+
+  <design_system>
+    <color_palette>
+      <dark_theme>
+        - Background: #1A1A2E (deep navy)
+        - Surface: #16213E (card backgrounds)
+        - Primary: #00D9FF (cyan/teal accent)
+        - Secondary: #4ECDC4 (teal)
+        - Accent: #FFE66D (gold for achievements/streaks)
+        - Success: #00E676 (green for correct)
+        - Error: #FF5252 (red for incorrect)
+        - Text Primary: #FFFFFF
+        - Text Secondary: #B0B0B0
+      </dark_theme>
+      <light_theme>
+        - Background: #F5F5F5
+        - Surface: #FFFFFF
+        - Primary: #0097A7 (darker teal)
+        - Secondary: #00BCD4
+        - Text Primary: #212121
+        - Text Secondary: #757575
+      </light_theme>
+    </color_palette>
+    <typography>
+      - Primary font: Inter or SF Pro (system fonts)
+      - Headings: Bold, clean sans-serif
+      - Body: Regular weight, high readability
+      - Numbers/Scores: Tabular figures, semi-bold
+    </typography>
+    <components>
+      - Rounded cards with subtle shadows
+      - Pill-shaped buttons
+      - Circular avatars
+      - Progress bars with gradient fills
+      - Icon set: Consistent line icons (Lucide or similar)
+    </components>
+    <animations>
+      - Micro-interactions on button taps
+      - Score increment animations
+      - Correct answer celebration (confetti, pulse)
+      - Wrong answer subtle shake
+      - Page transitions (slide/fade)
+      - Achievement unlock celebration
+    </animations>
+  </design_system>
+
+  <implementation_steps>
+    <step number="1">
+      <title>Project Setup & Core Infrastructure</title>
+      <tasks>
+        - Initialize React frontend with Vite
+        - Set up Node.js/Express backend
+        - Configure SQLite database with schema
+        - Set up project structure and routing
+        - Implement dark/light theme system
+        - Create base UI components (buttons, cards, inputs)
+      </tasks>
+    </step>
+
+    <step number="2">
+      <title>Authentication & User Management</title>
+      <tasks>
+        - Implement registration and login flows
+        - JWT token management
+        - Guest mode support
+        - User profile CRUD
+        - Settings management
+        - Password reset flow
+      </tasks>
+    </step>
+
+    <step number="3">
+      <title>Geography Data & Game Engine</title>
+      <tasks>
+        - Seed geography database (countries, capitals, flags, languages)
+        - Build core game engine (timer, scoring, streak system)
+        - Multiple choice component
+        - Typing input with fuzzy matching
+        - Question generation logic
+        - Game session management
+      </tasks>
+    </step>
+
+    <step number="4">
+      <title>Individual Game Types</title>
+      <tasks>
+        - Flags game (both directions)
+        - Capitals game (both directions)
+        - Maps game (click and identify modes)
+        - Languages game (both directions)
+        - Trivia game
+        - Regional filtering for all games
+      </tasks>
+    </step>
+
+    <step number="5">
+      <title>Progression & Learning System</title>
+      <tasks>
+        - Spaced repetition algorithm
+        - Smart question selection
+        - Difficulty progression
+        - XP and leveling system
+        - Per-category skill tracking
+        - XP caps implementation
+      </tasks>
+    </step>
+
+    <step number="6">
+      <title>Onboarding & Daily Engagement</title>
+      <tasks>
+        - Skill assessment quiz
+        - Tutorial walkthrough
+        - Daily streak system
+        - Personalized daily challenges
+        - Today/home screen
+      </tasks>
+    </step>
+
+    <step number="7">
+      <title>Social Features</title>
+      <tasks>
+        - Friends system (add, remove, list)
+        - Friend profiles
+        - Activity feed
+        - Social notifications
+      </tasks>
+    </step>
+
+    <step number="8">
+      <title>Multiplayer System</title>
+      <tasks>
+        - WebSocket server setup
+        - Challenge/invite system
+        - Real-time game synchronization
+        - Match state management
+        - Post-match results and replay
+        - Anti-cheat and security measures
+      </tasks>
+    </step>
+
+    <step number="9">
+      <title>Achievements & Leaderboards</title>
+      <tasks>
+        - Achievement definitions and tracking
+        - Achievement unlock logic
+        - Achievements page
+        - Global leaderboards
+        - Per-game leaderboards
+        - Friends leaderboard
+      </tasks>
+    </step>
+
+    <step number="10">
+      <title>Notifications & Offline Mode</title>
+      <tasks>
+        - Notification system
+        - Notification preferences
+        - Offline data caching
+        - Sync queue and reconnection logic
+      </tasks>
+    </step>
+
+    <step number="11">
+      <title>Polish & Optimization</title>
+      <tasks>
+        - Animations and transitions
+        - Loading and error states
+        - Empty states
+        - Performance optimization
+        - Accessibility improvements
+        - Final UI polish
+      </tasks>
+    </step>
+  </implementation_steps>
+
+  <success_criteria>
+    <functionality>
+      - All 5 solo game types fully functional with both question directions
+      - Multiple choice and typing modes working with fuzzy matching
+      - Speed-based scoring and streak bonuses working correctly
+      - Multiplayer friend challenges work seamlessly in real-time
+      - Spaced repetition and smart question selection functioning
+      - Offline solo play works and syncs correctly
+      - All CRUD operations for users, friends, games working
+    </functionality>
+    <user_experience>
+      - Onboarding is brief, fun, and informative
+      - Navigation is intuitive (bottom nav, clear hierarchy)
+      - Game feedback is immediate and satisfying
+      - Multiplayer feels responsive and synchronized
+      - Progress and stats are easy to understand
+    </user_experience>
+    <technical_quality>
+      - No security vulnerabilities in multiplayer (server-side validation)
+      - Responsive on mobile and desktop
+      - Fast load times (<3s initial, <1s navigation)
+      - Graceful error handling throughout
+      - Data integrity maintained (no score manipulation)
+    </technical_quality>
+    <design_polish>
+      - Matches Elevate's level of polish and smoothness
+      - Consistent visual language throughout
+      - Satisfying micro-interactions and animations
+      - Dark and light themes both polished
+      - App-store ready visual quality
+    </design_polish>
+  </success_criteria>
+</project_specification>

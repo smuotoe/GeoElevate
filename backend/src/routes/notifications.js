@@ -1,0 +1,149 @@
+import { Router } from 'express';
+import { getDb } from '../models/database.js';
+import { authenticate } from '../middleware/auth.js';
+
+const router = Router();
+
+/**
+ * Get user's notifications.
+ * GET /api/notifications
+ */
+router.get('/', authenticate, (req, res, next) => {
+    try {
+        const { limit = 50, offset = 0, unreadOnly = false } = req.query;
+        const db = getDb();
+
+        let query = `
+            SELECT * FROM notifications
+            WHERE user_id = ?
+        `;
+        const params = [req.userId];
+
+        if (unreadOnly === 'true') {
+            query += ' AND is_read = 0';
+        }
+
+        query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+        params.push(parseInt(limit), parseInt(offset));
+
+        const notifications = db.prepare(query).all(...params);
+
+        const unreadCount = db.prepare(
+            'SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0'
+        ).get(req.userId);
+
+        res.json({
+            notifications: notifications.map(n => ({
+                ...n,
+                data: JSON.parse(n.data_json || '{}')
+            })),
+            unreadCount: unreadCount.count
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/**
+ * Mark notification as read.
+ * PATCH /api/notifications/:id/read
+ */
+router.patch('/:id/read', authenticate, (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const db = getDb();
+
+        const result = db.prepare(`
+            UPDATE notifications
+            SET is_read = 1
+            WHERE id = ? AND user_id = ?
+        `).run(id, req.userId);
+
+        if (result.changes === 0) {
+            return res.status(404).json({
+                error: { message: 'Notification not found' }
+            });
+        }
+
+        res.json({ message: 'Notification marked as read' });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/**
+ * Mark all notifications as read.
+ * PATCH /api/notifications/read-all
+ */
+router.patch('/read-all', authenticate, (req, res, next) => {
+    try {
+        const db = getDb();
+
+        db.prepare(`
+            UPDATE notifications
+            SET is_read = 1
+            WHERE user_id = ? AND is_read = 0
+        `).run(req.userId);
+
+        res.json({ message: 'All notifications marked as read' });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/**
+ * Get notification settings.
+ * GET /api/notifications/settings
+ */
+router.get('/settings', authenticate, (req, res, next) => {
+    try {
+        const db = getDb();
+
+        const user = db.prepare(
+            'SELECT settings_json FROM users WHERE id = ?'
+        ).get(req.userId);
+
+        const settings = JSON.parse(user.settings_json || '{}');
+        const notificationSettings = settings.notifications || {
+            challenges: true,
+            friendRequests: true,
+            matchInvites: true,
+            achievements: true,
+            streakReminders: true,
+            friendActivity: true
+        };
+
+        res.json({ settings: notificationSettings });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/**
+ * Update notification settings.
+ * PATCH /api/notifications/settings
+ */
+router.patch('/settings', authenticate, (req, res, next) => {
+    try {
+        const db = getDb();
+
+        const user = db.prepare(
+            'SELECT settings_json FROM users WHERE id = ?'
+        ).get(req.userId);
+
+        const settings = JSON.parse(user.settings_json || '{}');
+        settings.notifications = { ...settings.notifications, ...req.body };
+
+        db.prepare(`
+            UPDATE users
+            SET settings_json = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        `).run(JSON.stringify(settings), req.userId);
+
+        res.json({ message: 'Notification settings updated', settings: settings.notifications });
+    } catch (err) {
+        next(err);
+    }
+});
+
+export default router;
