@@ -26,6 +26,8 @@ import notificationRoutes from './routes/notifications.js';
 import settingsRoutes from './routes/settings.js';
 import multiplayerRoutes from './routes/multiplayer.js';
 import syncRoutes from './routes/sync.js';
+import assessmentRoutes from './routes/assessment.js';
+import tutorialRoutes from './routes/tutorial.js';
 
 const app = express();
 const PORT = process.env.PORT || 5002;
@@ -69,6 +71,8 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/multiplayer', multiplayerRoutes);
 app.use('/api/sync', syncRoutes);
+app.use('/api/assessment', assessmentRoutes);
+app.use('/api/tutorial', tutorialRoutes);
 
 // Error handling middleware
 app.use((err, req, res, _next) => {
