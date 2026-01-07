@@ -8,6 +8,7 @@ import styles from './GamePlay.module.css'
 
 const QUESTION_TIME = 15
 const TOTAL_QUESTIONS = 10
+const FUZZY_THRESHOLD = 0.75 // 75% similarity required for fuzzy match
 
 /**
  * Format game type string with capitalized first letter.
@@ -20,6 +21,55 @@ function formatGameType(gameType) {
 }
 
 /**
+ * Calculate Levenshtein distance between two strings.
+ *
+ * @param {string} str1 - First string
+ * @param {string} str2 - Second string
+ * @returns {number} Edit distance between strings
+ */
+function levenshteinDistance(str1, str2) {
+    const m = str1.length
+    const n = str2.length
+    const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0))
+
+    for (let i = 0; i <= m; i++) dp[i][0] = i
+    for (let j = 0; j <= n; j++) dp[0][j] = j
+
+    for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+            if (str1[i - 1] === str2[j - 1]) {
+                dp[i][j] = dp[i - 1][j - 1]
+            } else {
+                dp[i][j] = 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1])
+            }
+        }
+    }
+    return dp[m][n]
+}
+
+/**
+ * Check if typed answer matches correct answer using fuzzy matching.
+ *
+ * @param {string} typed - User's typed answer
+ * @param {string} correct - Correct answer
+ * @returns {boolean} True if answer is close enough
+ */
+function isFuzzyMatch(typed, correct) {
+    const typedLower = typed.toLowerCase().trim()
+    const correctLower = correct.toLowerCase().trim()
+
+    // Exact match
+    if (typedLower === correctLower) return true
+
+    // Calculate similarity ratio
+    const distance = levenshteinDistance(typedLower, correctLower)
+    const maxLen = Math.max(typedLower.length, correctLower.length)
+    const similarity = 1 - (distance / maxLen)
+
+    return similarity >= FUZZY_THRESHOLD
+}
+
+/**
  * Game play page component with timer and pause functionality.
  *
  * @returns {React.ReactElement} Game play interface
@@ -27,10 +77,11 @@ function formatGameType(gameType) {
 function GamePlay() {
     const { gameType } = useParams()
     const navigate = useNavigate()
-    const { user } = useAuth()
+    const { user, checkAuth } = useAuth()
     const formattedGameType = formatGameType(gameType)
 
-    const [gameState, setGameState] = useState('loading')
+    const [gameState, setGameState] = useState('mode-select')
+    const [inputMode, setInputMode] = useState('choice') // 'choice' or 'typing'
     const [questions, setQuestions] = useState([])
     const [currentIndex, setCurrentIndex] = useState(0)
     const [timeLeft, setTimeLeft] = useState(QUESTION_TIME)
@@ -38,13 +89,17 @@ function GamePlay() {
     const [streak, setStreak] = useState(0)
     const [answers, setAnswers] = useState([])
     const [isPaused, setIsPaused] = useState(false)
+    const [showQuitConfirm, setShowQuitConfirm] = useState(false)
     const [selectedAnswer, setSelectedAnswer] = useState(null)
+    const [typedAnswer, setTypedAnswer] = useState('')
     const [showResult, setShowResult] = useState(false)
     const [error, setError] = useState(null)
     const [sessionId, setSessionId] = useState(null)
 
     const timerRef = useRef(null)
     const pausedTimeRef = useRef(null)
+    const processingRef = useRef(false)
+    const inputRef = useRef(null)
 
     const currentQuestion = questions[currentIndex]
 
@@ -89,12 +144,21 @@ function GamePlay() {
         }
     }, [gameType, user])
 
-    useEffect(() => {
+    // Start game with selected mode
+    const startGame = (mode) => {
+        setInputMode(mode)
         loadQuestions()
-    }, [loadQuestions])
+    }
+
+    // Focus input when in typing mode and question changes
+    useEffect(() => {
+        if (inputMode === 'typing' && gameState === 'playing' && inputRef.current) {
+            inputRef.current.focus()
+        }
+    }, [currentIndex, gameState, inputMode])
 
     useEffect(() => {
-        if (gameState !== 'playing' || isPaused || showResult) {
+        if (gameState !== 'playing' || isPaused || showResult || showQuitConfirm) {
             return
         }
 
@@ -113,7 +177,7 @@ function GamePlay() {
                 clearInterval(timerRef.current)
             }
         }
-    }, [gameState, isPaused, showResult, currentIndex])
+    }, [gameState, isPaused, showResult, showQuitConfirm, currentIndex])
 
     const handleTimeout = () => {
         if (timerRef.current) {
@@ -126,16 +190,18 @@ function GamePlay() {
         }
 
         setStreak(0)
-        setAnswers(prev => [...prev, {
+        const newAnswer = {
             question: currentQuestion,
             userAnswer: null,
             correctAnswer: currentQuestion.correctAnswer,
             isCorrect: false,
             timeMs: QUESTION_TIME * 1000
-        }])
+        }
+        const newAnswers = [...answers, newAnswer]
+        setAnswers(newAnswers)
 
         setShowResult(true)
-        setTimeout(moveToNext, 1500)
+        setTimeout(() => moveToNext(newAnswers, score), 1500)
     }
 
     const handleAnswer = (answer) => {
@@ -151,58 +217,112 @@ function GamePlay() {
         setSelectedAnswer(answer)
         setShowResult(true)
 
+        let newScore = score
         if (isCorrect) {
             const basePoints = 100
             const timeBonus = Math.floor(timeLeft * 10)
             const streakBonus = streak * 20
-            setScore(prev => prev + basePoints + timeBonus + streakBonus)
+            newScore = score + basePoints + timeBonus + streakBonus
+            setScore(newScore)
             setStreak(prev => prev + 1)
         } else {
             setStreak(0)
         }
 
-        setAnswers(prev => [...prev, {
+        const newAnswer = {
             question: currentQuestion,
             userAnswer: answer,
             correctAnswer: currentQuestion.correctAnswer,
             isCorrect,
             timeMs
-        }])
+        }
 
-        setTimeout(moveToNext, 1500)
+        const newAnswers = [...answers, newAnswer]
+        setAnswers(newAnswers)
+
+        // Pass the updated data directly to avoid stale closure issues
+        setTimeout(() => moveToNext(newAnswers, newScore), 1500)
     }
 
-    const moveToNext = async () => {
-        if (currentIndex >= questions.length - 1) {
+    const handleTypingSubmit = (e) => {
+        e.preventDefault()
+        if (showResult || !currentQuestion || !typedAnswer.trim()) return
+
+        if (timerRef.current) {
+            clearInterval(timerRef.current)
+        }
+
+        const isCorrect = isFuzzyMatch(typedAnswer, currentQuestion.correctAnswer)
+        const timeMs = (QUESTION_TIME - timeLeft) * 1000
+
+        setSelectedAnswer(typedAnswer)
+        setShowResult(true)
+
+        let newScore = score
+        if (isCorrect) {
+            const basePoints = 100
+            const timeBonus = Math.floor(timeLeft * 10)
+            const streakBonus = streak * 20
+            newScore = score + basePoints + timeBonus + streakBonus
+            setScore(newScore)
+            setStreak(prev => prev + 1)
+        } else {
+            setStreak(0)
+        }
+
+        const newAnswer = {
+            question: currentQuestion,
+            userAnswer: typedAnswer,
+            correctAnswer: currentQuestion.correctAnswer,
+            isCorrect,
+            timeMs
+        }
+
+        const newAnswers = [...answers, newAnswer]
+        setAnswers(newAnswers)
+        setTypedAnswer('')
+
+        setTimeout(() => moveToNext(newAnswers, newScore), 1500)
+    }
+
+    const moveToNext = async (currentAnswers, currentScore) => {
+        // Prevent duplicate processing (React StrictMode double-render issue)
+        if (processingRef.current) {
+            return
+        }
+
+        // Use passed answers array to check if game is complete
+        const answersToUse = currentAnswers || answers
+        const scoreToUse = currentScore !== undefined ? currentScore : score
+        const isLastQuestion = answersToUse.length >= questions.length
+
+        if (isLastQuestion) {
+            processingRef.current = true
             // Game finished - save the session
             if (sessionId && user) {
-                const correctCount = answers.filter(a => a.isCorrect).length + (selectedAnswer === currentQuestion?.correctAnswer ? 1 : 0)
-                const totalAnswers = answers.length + 1
+                const correctCount = answersToUse.filter(a => a.isCorrect).length
+                const totalAnswers = answersToUse.length
                 const avgTimeMs = Math.round(
-                    [...answers, { timeMs: (QUESTION_TIME - timeLeft) * 1000 }]
-                        .reduce((sum, a) => sum + a.timeMs, 0) / totalAnswers
+                    answersToUse.reduce((sum, a) => sum + a.timeMs, 0) / totalAnswers
                 )
-                const xpEarned = Math.round(score * 0.1)
+                const xpEarned = Math.round(scoreToUse * 0.1)
 
                 try {
                     await api.patch(`/games/sessions/${sessionId}`, {
-                        score,
+                        score: scoreToUse,
                         xpEarned,
                         correctCount,
                         averageTimeMs: avgTimeMs,
-                        answers: [...answers, {
-                            question: currentQuestion,
-                            userAnswer: selectedAnswer,
-                            correctAnswer: currentQuestion?.correctAnswer,
-                            isCorrect: selectedAnswer === currentQuestion?.correctAnswer,
-                            timeMs: (QUESTION_TIME - timeLeft) * 1000
-                        }]
+                        answers: answersToUse
                     })
+                    // Refresh user data to update streak and XP in context
+                    await checkAuth()
                 } catch (saveErr) {
                     console.error('Failed to save session:', saveErr)
                 }
             }
             setGameState('finished')
+            processingRef.current = false
             return
         }
 
@@ -222,20 +342,32 @@ function GamePlay() {
 
     const handleResume = () => {
         setIsPaused(false)
+        setShowQuitConfirm(false)
     }
 
-    const handleQuit = () => {
+    const handleQuitClick = () => {
+        setShowQuitConfirm(true)
+    }
+
+    const handleQuitCancel = () => {
+        setShowQuitConfirm(false)
+    }
+
+    const handleQuitConfirm = () => {
         navigate('/games')
     }
 
     const handleRestart = () => {
+        processingRef.current = false
         setCurrentIndex(0)
         setScore(0)
         setStreak(0)
         setAnswers([])
         setSelectedAnswer(null)
+        setTypedAnswer('')
         setShowResult(false)
         setIsPaused(false)
+        setShowQuitConfirm(false)
         setSessionId(null)
         loadQuestions()
     }
@@ -254,6 +386,47 @@ function GamePlay() {
         }
 
         return styles.disabled
+    }
+
+    if (gameState === 'mode-select') {
+        return (
+            <div className="page">
+                <div className="page-header">
+                    <Breadcrumb items={breadcrumbItems} />
+                    <h1 className="page-title">{formattedGameType}</h1>
+                </div>
+                <div className="card">
+                    <h2 style={{ marginBottom: '16px', color: 'var(--text-primary)' }}>
+                        Select Game Mode
+                    </h2>
+                    <p className="text-secondary" style={{ marginBottom: '24px' }}>
+                        Choose how you want to answer questions:
+                    </p>
+                    <div className={styles.modeButtons}>
+                        <button
+                            className="btn btn-primary"
+                            onClick={() => startGame('choice')}
+                            style={{ flex: 1, padding: '16px' }}
+                        >
+                            <span style={{ fontSize: '24px', display: 'block', marginBottom: '8px' }}>
+                                A B C D
+                            </span>
+                            Multiple Choice
+                        </button>
+                        <button
+                            className="btn btn-secondary"
+                            onClick={() => startGame('typing')}
+                            style={{ flex: 1, padding: '16px' }}
+                        >
+                            <span style={{ fontSize: '24px', display: 'block', marginBottom: '8px' }}>
+                                ...
+                            </span>
+                            Type Answer
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )
     }
 
     if (gameState === 'loading') {
@@ -391,25 +564,60 @@ function GamePlay() {
                 )}
             </div>
 
-            <div className={styles.optionsGrid}>
-                {currentQuestion.options?.map((option, idx) => (
-                    <button
-                        key={idx}
-                        className={`${styles.optionButton} ${getOptionClass(option)}`}
-                        onClick={() => handleAnswer(option)}
-                        disabled={showResult}
-                    >
-                        {option?.startsWith('http') ? (
-                            <img src={option} alt={`Option ${idx + 1}`} className={styles.optionImage} />
-                        ) : (
-                            option
-                        )}
-                    </button>
-                ))}
-            </div>
+            {inputMode === 'choice' ? (
+                <div className={styles.optionsGrid}>
+                    {currentQuestion.options?.map((option, idx) => (
+                        <button
+                            key={idx}
+                            className={`${styles.optionButton} ${getOptionClass(option)}`}
+                            onClick={() => handleAnswer(option)}
+                            disabled={showResult}
+                        >
+                            {option?.startsWith('http') ? (
+                                <img src={option} alt={`Option ${idx + 1}`} className={styles.optionImage} />
+                            ) : (
+                                option
+                            )}
+                        </button>
+                    ))}
+                </div>
+            ) : (
+                <div className={styles.typingContainer}>
+                    <form onSubmit={handleTypingSubmit}>
+                        <input
+                            ref={inputRef}
+                            type="text"
+                            className={`${styles.typingInput} ${showResult ? (isFuzzyMatch(selectedAnswer || '', currentQuestion.correctAnswer) ? styles.correct : styles.incorrect) : ''}`}
+                            value={typedAnswer}
+                            onChange={(e) => setTypedAnswer(e.target.value)}
+                            placeholder="Type your answer..."
+                            disabled={showResult}
+                            autoComplete="off"
+                            autoFocus
+                        />
+                        <button
+                            type="submit"
+                            className="btn btn-primary"
+                            disabled={showResult || !typedAnswer.trim()}
+                            style={{ marginTop: '12px', width: '100%' }}
+                        >
+                            Submit Answer
+                        </button>
+                    </form>
+                    {showResult && (
+                        <div className={styles.typingResult}>
+                            <p className={isFuzzyMatch(selectedAnswer || '', currentQuestion.correctAnswer) ? styles.correctText : styles.incorrectText}>
+                                {isFuzzyMatch(selectedAnswer || '', currentQuestion.correctAnswer)
+                                    ? 'Correct!'
+                                    : `Wrong! The answer was: ${currentQuestion.correctAnswer}`}
+                            </p>
+                        </div>
+                    )}
+                </div>
+            )}
 
             <Modal
-                isOpen={isPaused}
+                isOpen={isPaused && !showQuitConfirm}
                 onClose={handleResume}
                 title="Game Paused"
             >
@@ -426,7 +634,7 @@ function GamePlay() {
                     <div className={styles.pauseButtons}>
                         <button
                             className="btn btn-secondary"
-                            onClick={handleQuit}
+                            onClick={handleQuitClick}
                         >
                             Quit Game
                         </button>
@@ -435,6 +643,35 @@ function GamePlay() {
                             onClick={handleResume}
                         >
                             Resume
+                        </button>
+                    </div>
+                </div>
+            </Modal>
+
+            <Modal
+                isOpen={showQuitConfirm}
+                onClose={handleQuitCancel}
+                title="Quit Game?"
+            >
+                <div className={styles.pauseContent}>
+                    <p className={styles.pauseInfo}>
+                        Are you sure you want to quit?
+                    </p>
+                    <p className={styles.pauseInfo}>
+                        Your progress will not be saved.
+                    </p>
+                    <div className={styles.pauseButtons}>
+                        <button
+                            className="btn btn-secondary"
+                            onClick={handleQuitCancel}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            className="btn btn-primary"
+                            onClick={handleQuitConfirm}
+                        >
+                            Quit
                         </button>
                     </div>
                 </div>

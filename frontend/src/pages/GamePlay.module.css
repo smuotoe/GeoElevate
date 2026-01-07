@@ -237,3 +237,60 @@
     justify-content: center;
     margin-top: 24px;
 }
+
+.modeButtons {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.typingContainer {
+    margin-top: 8px;
+}
+
+.typingInput {
+    width: 100%;
+    padding: 16px;
+    font-size: 18px;
+    border: 2px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+.typingInput:focus {
+    border-color: var(--color-primary);
+}
+
+.typingInput.correct {
+    border-color: var(--color-success);
+    background: rgba(34, 197, 94, 0.1);
+}
+
+.typingInput.incorrect {
+    border-color: var(--color-error);
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.typingResult {
+    margin-top: 16px;
+    padding: 12px;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.correctText {
+    color: var(--color-success);
+    font-weight: 600;
+    font-size: 16px;
+    margin: 0;
+}
+
+.incorrectText {
+    color: var(--color-error);
+    font-weight: 600;
+    font-size: 16px;
+    margin: 0;
+}
