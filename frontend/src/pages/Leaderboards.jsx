@@ -1,9 +1,21 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../utils/api'
 import styles from './Leaderboards.module.css'
 
 const PAGE_SIZE = 10
+const GAME_TYPES = [
+    { id: '', name: 'All Games' },
+    { id: 'flags', name: 'Flags' },
+    { id: 'capitals', name: 'Capitals' },
+    { id: 'maps', name: 'Maps' },
+    { id: 'languages', name: 'Languages' },
+    { id: 'trivia', name: 'Trivia' }
+]
+
+const VALID_TABS = ['global', 'weekly', 'friends']
+const VALID_GAME_TYPES = GAME_TYPES.map(t => t.id)
 
 /**
  * Leaderboards page component.
@@ -11,23 +23,59 @@ const PAGE_SIZE = 10
  * @returns {React.ReactElement} Leaderboards page
  */
 function Leaderboards() {
-    const [activeTab, setActiveTab] = useState('global')
+    const [searchParams, setSearchParams] = useSearchParams()
+
+    // Initialize state from URL params with validation
+    const tabParam = searchParams.get('tab')
+    const gameParam = searchParams.get('game')
+    const pageParam = searchParams.get('page')
+
+    const initialTab = VALID_TABS.includes(tabParam) ? tabParam : 'global'
+    const initialGame = VALID_GAME_TYPES.includes(gameParam) ? gameParam : ''
+    const initialPage = parseInt(pageParam) > 0 ? parseInt(pageParam) : 1
+
+    const [activeTab, setActiveTab] = useState(initialTab)
+    const [gameType, setGameType] = useState(initialGame)
     const [leaderboard, setLeaderboard] = useState([])
     const [userRank, setUserRank] = useState(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
-    const [page, setPage] = useState(1)
+    const [page, setPage] = useState(initialPage)
     const [hasMore, setHasMore] = useState(false)
     const { user } = useAuth()
 
-    const fetchLeaderboard = useCallback(async (tab, pageNum) => {
+    // Sync state changes to URL
+    useEffect(() => {
+        const params = new URLSearchParams()
+        if (activeTab !== 'global') params.set('tab', activeTab)
+        if (gameType) params.set('game', gameType)
+        if (page > 1) params.set('page', page.toString())
+        setSearchParams(params, { replace: true })
+    }, [activeTab, gameType, page, setSearchParams])
+
+    const fetchLeaderboard = useCallback(async (tab, pageNum, gameTypeFilter) => {
         setLoading(true)
         setError(null)
         try {
             const offset = (pageNum - 1) * PAGE_SIZE
-            const endpoint = tab === 'friends'
-                ? '/leaderboards/friends'
-                : `/leaderboards/${tab}?limit=${PAGE_SIZE}&offset=${offset}`
+            let endpoint
+
+            if (tab === 'friends') {
+                // Friends leaderboard with optional game type filter
+                endpoint = gameTypeFilter
+                    ? `/leaderboards/friends?gameType=${gameTypeFilter}`
+                    : '/leaderboards/friends'
+            } else if (tab === 'weekly') {
+                // Weekly leaderboard with optional game type filter
+                endpoint = gameTypeFilter
+                    ? `/leaderboards/weekly?gameType=${gameTypeFilter}&limit=${PAGE_SIZE}&offset=${offset}`
+                    : `/leaderboards/weekly?limit=${PAGE_SIZE}&offset=${offset}`
+            } else if (gameTypeFilter) {
+                // Game type specific leaderboard
+                endpoint = `/leaderboards/game/${gameTypeFilter}?limit=${PAGE_SIZE}&offset=${offset}`
+            } else {
+                endpoint = `/leaderboards/${tab}?limit=${PAGE_SIZE}&offset=${offset}`
+            }
 
             const data = await api.get(endpoint)
             setLeaderboard(data.leaderboard || [])
@@ -42,18 +90,16 @@ function Leaderboards() {
     }, [])
 
     useEffect(() => {
-        setPage(1)
-        fetchLeaderboard(activeTab, 1)
-    }, [activeTab, fetchLeaderboard])
-
-    useEffect(() => {
-        if (page > 1) {
-            fetchLeaderboard(activeTab, page)
-        }
-    }, [page, activeTab, fetchLeaderboard])
+        fetchLeaderboard(activeTab, page, gameType)
+    }, [activeTab, gameType, page, fetchLeaderboard])
 
     const handleTabChange = (tab) => {
         setActiveTab(tab)
+        setPage(1)
+    }
+
+    const handleGameTypeChange = (newGameType) => {
+        setGameType(newGameType)
         setPage(1)
     }
 
@@ -70,6 +116,7 @@ function Leaderboards() {
     }
 
     const getXpLabel = () => {
+        if (gameType) return 'XP'
         if (activeTab === 'weekly') return 'Weekly XP'
         return 'XP'
     }
@@ -80,7 +127,7 @@ function Leaderboards() {
                 <h1 className="page-title">Leaderboards</h1>
             </div>
 
-            <div className="tabs mb-md" style={{ display: 'flex', gap: '8px' }}>
+            <div className="tabs mb-md" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 {['global', 'weekly', 'friends'].map(tab => (
                     <button
                         key={tab}
@@ -91,6 +138,32 @@ function Leaderboards() {
                         {tab}
                     </button>
                 ))}
+            </div>
+
+            <div className="mb-md" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <label htmlFor="gameTypeFilter" style={{ color: 'var(--text-secondary)' }}>
+                    Game Type:
+                </label>
+                <select
+                    id="gameTypeFilter"
+                    value={gameType}
+                    onChange={(e) => handleGameTypeChange(e.target.value)}
+                    style={{
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        backgroundColor: 'var(--surface)',
+                        color: 'var(--text-primary)',
+                        border: '1px solid var(--border)',
+                        fontSize: '14px',
+                        minWidth: '150px'
+                    }}
+                >
+                    {GAME_TYPES.map(type => (
+                        <option key={type.id} value={type.id}>
+                            {type.name}
+                        </option>
+                    ))}
+                </select>
             </div>
 
             {loading ? (

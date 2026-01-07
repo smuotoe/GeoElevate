@@ -52,25 +52,37 @@ function Notifications() {
     const [sortOrder, setSortOrder] = useState('desc')
     const [unreadCount, setUnreadCount] = useState(0)
 
-    const fetchNotifications = useCallback(async () => {
-        if (!user) return
-        setLoading(true)
-        setError(null)
-        try {
-            const data = await api.get(`/notifications?sortOrder=${sortOrder}`)
-            setNotifications(data.notifications || [])
-            setUnreadCount(data.unreadCount || 0)
-        } catch (err) {
-            setError(err.message)
-            setNotifications([])
-        } finally {
-            setLoading(false)
+    useEffect(() => {
+        let ignore = false
+
+        async function fetchNotifications() {
+            if (!user) return
+            setLoading(true)
+            setError(null)
+            try {
+                const data = await api.get(`/notifications?sortOrder=${sortOrder}`)
+                if (!ignore) {
+                    setNotifications(data.notifications || [])
+                    setUnreadCount(data.unreadCount || 0)
+                }
+            } catch (err) {
+                if (!ignore) {
+                    setError(err.message)
+                    setNotifications([])
+                }
+            } finally {
+                if (!ignore) {
+                    setLoading(false)
+                }
+            }
+        }
+
+        fetchNotifications()
+
+        return () => {
+            ignore = true
         }
     }, [user, sortOrder])
-
-    useEffect(() => {
-        fetchNotifications()
-    }, [fetchNotifications])
 
     /**
      * Toggle sort order between ascending and descending.
@@ -81,6 +93,7 @@ function Notifications() {
 
     /**
      * Mark a notification as read.
+     * Handles case where notification was deleted by another session.
      *
      * @param {number} id - Notification ID
      */
@@ -92,7 +105,18 @@ function Notifications() {
             )
             setUnreadCount(prev => Math.max(0, prev - 1))
         } catch (err) {
-            console.error('Failed to mark notification as read:', err)
+            // Handle deleted record gracefully
+            if (err.message.includes('not found') || err.message.includes('Not found')) {
+                // Remove the stale notification from the list
+                setNotifications(prev => prev.filter(n => n.id !== id))
+                setError('This notification no longer exists. It may have been deleted.')
+                // Clear the error after 3 seconds
+                setTimeout(() => setError(null), 3000)
+            } else {
+                console.error('Failed to mark notification as read:', err)
+                setError(err.message)
+                setTimeout(() => setError(null), 3000)
+            }
         }
     }
 
@@ -106,6 +130,8 @@ function Notifications() {
             setUnreadCount(0)
         } catch (err) {
             console.error('Failed to mark all as read:', err)
+            setError(err.message)
+            setTimeout(() => setError(null), 3000)
         }
     }
 
@@ -168,12 +194,22 @@ function Notifications() {
                 )}
             </div>
 
+            {error && !loading && notifications.length > 0 && (
+                <div className="card mb-md" style={{
+                    padding: '12px 16px',
+                    background: 'var(--error-bg, rgba(239, 68, 68, 0.1))',
+                    borderLeft: '3px solid var(--error)'
+                }}>
+                    <p style={{ color: 'var(--error)', margin: 0 }}>{error}</p>
+                </div>
+            )}
+
             {loading ? (
                 <div className="card" style={{ textAlign: 'center', padding: '40px' }}>
                     <div className="loading-spinner" style={{ margin: '0 auto' }} />
                     <p className="text-secondary mt-md">Loading notifications...</p>
                 </div>
-            ) : error ? (
+            ) : error && notifications.length === 0 ? (
                 <div className="card">
                     <p style={{ color: 'var(--error)' }}>{error}</p>
                     <button className="btn btn-primary mt-md" onClick={fetchNotifications}>

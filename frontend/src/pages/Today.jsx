@@ -14,28 +14,36 @@ function Today() {
     const [loadingChallenges, setLoadingChallenges] = useState(false)
 
     useEffect(() => {
+        let ignore = false
+
+        async function fetchChallenges() {
+            setLoadingChallenges(true)
+            try {
+                const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+                const data = await api.get(`/daily/challenges?timezone=${encodeURIComponent(timezone)}`)
+                if (!ignore) {
+                    setChallenges(data.challenges || [])
+                }
+            } catch (err) {
+                if (!ignore) {
+                    console.error('Failed to fetch challenges:', err)
+                    setChallenges([])
+                }
+            } finally {
+                if (!ignore) {
+                    setLoadingChallenges(false)
+                }
+            }
+        }
+
         if (user) {
             fetchChallenges()
         }
-    }, [user])
 
-    /**
-     * Fetch daily challenges from API.
-     * Sends client timezone for correct "today" calculation.
-     */
-    async function fetchChallenges() {
-        setLoadingChallenges(true)
-        try {
-            const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
-            const data = await api.get(`/daily/challenges?timezone=${encodeURIComponent(timezone)}`)
-            setChallenges(data.challenges || [])
-        } catch (err) {
-            console.error('Failed to fetch challenges:', err)
-            setChallenges([])
-        } finally {
-            setLoadingChallenges(false)
+        return () => {
+            ignore = true
         }
-    }
+    }, [user])
 
     /**
      * Get display name for challenge type.
