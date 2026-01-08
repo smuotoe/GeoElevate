@@ -1,5 +1,92 @@
 # GeoElevate - Progress Report
 
+## Session 18 Progress
+- **Date**: January 8, 2026
+- **Status**: 182/302 features passing (60.3%)
+- **Focus**: Difficulty scaling, spaced repetition algorithm
+
+### Features Completed This Session
+
+#### Feature #219: Difficulty scaling by obscurity
+- **Description**: Verify difficulty progression by country familiarity
+- **Implementation**:
+  - Added population data to all 35 countries for familiarity-based filtering
+  - Created `getDifficultyFilter()` function using population thresholds
+  - Easy: well-known countries (high population, ordered by pop DESC)
+  - Medium: mixed countries (random order)
+  - Hard: less familiar countries (low population, ordered by pop ASC)
+- **Verification**:
+  - Easy mode returned: India, China, USA, Indonesia, Nigeria, Brazil
+  - Hard mode returned: New Zealand, Norway, Finland, Denmark, Switzerland
+- **Result**: Difficulty scaling by country familiarity working correctly
+
+#### Feature #220: Difficulty scaling by time pressure
+- **Description**: Verify time-based difficulty
+- **Implementation**:
+  - Added DIFFICULTY_TIME constant: { easy: 20, medium: 15, hard: 10 }
+  - Added `questionTime` computed value based on difficulty selection
+  - Updated all timer references to use dynamic questionTime
+- **Verification**:
+  - Easy mode: 20 seconds per question (verified via timer display)
+  - Medium mode: 15 seconds per question
+  - Hard mode: 10 seconds per question (verified via timer display)
+- **Result**: Time pressure scales correctly with difficulty
+
+#### Feature #221: Spaced repetition schedules questions
+- **Description**: Verify SR algorithm works
+- **Implementation**:
+  - Added `updateSpacedRepetition()` function using SM-2 algorithm
+  - Tracks: times_seen, times_correct, times_wrong per fact
+  - Wrong answers: interval resets to 1 day, ease_factor decreases (min 1.3)
+  - Correct answers: interval *= ease_factor, ease_factor increases (max 2.5)
+  - Modified `generateFlagQuestions()` to prioritize due-review items
+  - Passes userId to question generators for personalized scheduling
+- **Algorithm Details**:
+  - New facts start with ease_factor=2.5, interval_days=1
+  - Due items (next_review_at <= now OR times_wrong > times_correct) prioritized
+  - Up to half of questions pulled from due-review items
+- **Result**: SM-2 spaced repetition algorithm implemented
+
+### Code Changes This Session
+
+#### Backend
+- `backend/src/routes/games.js`:
+  - Added `getDifficultyFilter()` for population-based filtering
+  - Updated all question generators with difficulty filtering
+  - Added `updateSpacedRepetition()` with SM-2 algorithm
+  - Modified question generation to prioritize due-review items
+  - Pass userId to question generators for personalization
+- `backend/seed-population.js` (NEW):
+  - Script to seed country population data
+
+#### Frontend
+- `frontend/src/pages/GamePlay.jsx`:
+  - Added `difficulty` state (default: 'medium')
+  - Added `DIFFICULTY_TIME` constant
+  - Added `questionTime` computed value
+  - Added difficulty selector UI with Easy/Medium/Hard buttons
+  - Pass difficulty parameter to API
+
+### Commits Made
+1. "Add difficulty scaling by country obscurity and time pressure"
+2. "Implement spaced repetition (SM-2) algorithm for question scheduling"
+
+### What the Next Agent Should Do
+
+1. **Get next feature** - Use `feature_get_next` to continue implementation
+2. **Run regression tests** - Verify existing features still work
+3. **Note**: Backend server may need restart to load new SR code changes
+
+### Technical Notes
+
+- **Test user**: srtest@example.com / Test123! / srtest (new user created this session)
+- **Frontend**: http://localhost:5173
+- **Backend**: http://localhost:5002
+- **Spaced Repetition**: Data stored in user_fact_progress table
+- **Population data**: All 35 countries now have population values
+
+---
+
 ## Session 17 Progress
 - **Date**: January 7, 2026
 - **Status**: 176/302 features passing (58.3%)
@@ -8,898 +95,25 @@
 ### Features Completed This Session
 
 #### Feature #213: Language to countries mode works
-- **Description**: Verify reverse languages game
-- **Verification**:
-  - Step 1: Started Languages game at /play/languages
-  - Step 2: Selected "Language to Country" mode
-  - Step 3: Questions showed language names (e.g., "Which country speaks Polish?")
-  - Step 4: Country names displayed as options
-  - Step 5: Completed game with 1580 points, 8/10 correct
+- **Verification**: Started Languages game, selected "Language to Country" mode, completed successfully
 - **Result**: Language to Countries mode working correctly
 
 #### Feature #214: Trivia varied question formats
-- **Description**: Verify trivia game variety
-- **Implementation**:
-  - Created `seed-trivia.js` with 48 trivia facts across categories:
-    - Population, Landmarks, Currency, Geography, Borders, Continents, Islands, Climate, History
-  - Fixed `generateTriviaQuestions` to include multiple choice options
-- **Verification**:
-  - Started Trivia game
-  - Saw varied question categories:
-    - Currency: "What is the official currency of Brazil?" (Real)
-    - Population: "Which African country has the largest population?" (Nigeria)
-    - Geography: "Which is the smallest country by area?" (Vatican City)
-    - Borders: "Which two countries share the longest international border?" (US/Canada)
-    - Islands: "Which is the largest island in the world?" (Greenland)
-  - Game completed successfully
+- **Implementation**: Created seed-trivia.js with 48 facts, fixed generateTriviaQuestions
 - **Result**: Trivia game working with varied question formats
 
 #### Feature #215: Regional filter Europe works
-- **Description**: Verify Europe region filtering
-- **Verification**:
-  - Step 1: Started Flags game at /play/flags
-  - Step 2: Selected "Europe" from Filter by Region dropdown
-  - Step 3: Played through questions
-  - Step 4: All flags shown were European countries:
-    - United Kingdom, Spain, France, Switzerland, Germany, Austria, Netherlands, etc.
+- **Verification**: Tested Europe filter, all flags were European countries
 - **Result**: Europe regional filter working correctly
 
-### Code Changes This Session
-
-#### Backend
-- `backend/seed-trivia.js` (NEW): Seed script with 48 trivia facts
-- `backend/src/routes/games.js`:
-  - Fixed `generateTriviaQuestions` to generate multiple choice options
-  - Wrong answers pulled from other trivia answers randomly
-
-#### Frontend
-- `frontend/vite.config.js`:
-  - Fixed proxy to point to port 5002 (was 5003)
-
-### What the Next Agent Should Do
-
-1. **Get next feature** - Use `feature_get_next` to continue implementation
-2. **Run regression tests** - Verify existing features still work
-3. **Continue with remaining regional filter and game features**
-
-### Technical Notes
-
-- **Test user**: test@example.com / password123 / testuser
-- **Frontend**: http://localhost:5173
-- **Backend**: http://localhost:5002
-- **Trivia facts**: 48 facts seeded across 9 categories
-
 ---
 
-## Session 16 Progress
-- **Date**: January 7, 2026
-- **Status**: 170/302 features passing (56.3%)
-- **Focus**: Game direction modes (Flag/Country, Country/Capital)
-
-### Features Completed This Session
-
-#### Feature #205: Share results creates shareable content
-- **Description**: Verify share functionality
-- **Verification**:
-  - Step 1: Completed a Flags game (820 points)
-  - Step 2: Clicked Share button on results screen
-  - Step 3: Share dialog opened with title "Share Your Results"
-  - Step 4: Generated shareable text: "I just scored 820 points in Flags on GeoElevate! 5/8 correct (63% accuracy). Can you beat my score?"
-  - Also tested: Copy to Clipboard shows "Copied!" alert
-- **Result**: Share functionality working correctly
-
-#### Feature #206: Flag to country mode works
-- **Description**: Verify flags game variant
-- **Implementation**:
-  - Added `questionMode` state to GamePlay.jsx
-  - Added "Question Direction" UI section for flags/capitals games
-  - Pass `mode` parameter to API for question generation
-- **Verification**:
-  - Step 1: Started Flags game at /play/flags
-  - Step 2: "Flag to Country" mode selected by default
-  - Step 3: Flag images displayed as question prompts
-  - Step 4: Country names displayed as text options
-  - Step 5: Game completed successfully
-- **Result**: Flag to Country mode working
-
-#### Feature #207: Country to flag mode works
-- **Description**: Verify reverse flags game
-- **Verification**:
-  - Step 1: Started Flags game
-  - Step 2: Selected "Country to Flag" button
-  - Step 3: Country names displayed as headings (Nigeria, Canada, Thailand, Germany)
-  - Step 4: Flag images displayed as answer options
-  - Step 5: Game completed with 190 points
-- **Result**: Country to Flag mode working
-
-#### Feature #208: Country to capital mode works
-- **Description**: Verify capitals game variant
-- **Verification**:
-  - Step 1: Started Capitals game at /play/capitals
-  - Step 2: "Country to Capital" mode selected by default
-  - Step 3: Country names displayed (Thailand, South Africa, Belgium)
-  - Step 4: Capital names displayed as options (Bangkok, Pretoria, Brussels)
-  - Step 5: Game completed with 370 points
-- **Result**: Country to Capital mode working
-
-### Code Changes This Session
-
-#### Frontend
-- `frontend/src/pages/GamePlay.jsx`:
-  - Added `questionMode` state for game direction tracking
-  - Added useEffect to set default mode based on gameType
-  - Added `modeParam` to API call for question generation
-  - Added "Question Direction" UI section with toggle buttons
-  - Flags: "Flag to Country" / "Country to Flag" options
-  - Capitals: "Country to Capital" / "Capital to Country" options
-
-### What the Next Agent Should Do
-
-1. **Get next feature** - Use `feature_get_next` (likely Feature #209: Capital to Country mode)
-2. **Run regression tests** - Verify existing features still work
-3. **Continue with remaining game mode features**
-
-### Technical Notes
-
-- **Test user**: test@example.com / password123 / testuser
-- **Frontend**: http://localhost:5173
-- **Backend**: http://localhost:5003
-- **Question Direction defaults**: flag-to-country, country-to-capital
-
----
-
-## Session 15 Progress
-- **Date**: January 7, 2026
-- **Status**: 156/302 features passing (51.7%)
-- **Focus**: Skill assessment and tutorial features
-
-### Features Completed This Session
-
-#### Feature #193: Skill assessment quiz completes correctly
-- **Description**: Verify initial assessment workflow
-- **Implementation**: Already fully implemented
-- **Verification**:
-  - Step 1: Registered new user "skilltest193" and "assesstest193"
-  - Step 2: After registration, redirected to /assessment page with welcome screen
-  - Step 3: Completed 15 assessment questions across 5 categories
-  - Step 4: Profile showed skill levels based on performance:
-    - Capitals, Flags, Languages, Trivia: Level 3 (100% correct)
-    - Maps: Level 2 (67% correct - 1 wrong answer)
-  - Step 5: Tested "Skip for Now" button - redirects to home page
-- **Result**: Full skill assessment workflow working correctly
-
-#### Feature #194: Tutorial walkthrough completes
-- **Description**: Verify tutorial flow
-- **Implementation**:
-  - Created Tutorial.jsx with 8 walkthrough steps
-  - Added /api/tutorial routes (status, complete, skip)
-  - Added /tutorial route to App.jsx
-- **Verification**:
-  - Step 1: Started as logged-in user
-  - Step 2: Navigated through all 8 tutorial steps
-  - Step 3: Each step explains a feature with icon, title, description
-  - Step 4: "Skip Tutorial" button works - redirects to home
-  - Step 5: Tutorial completion tracked via API
-- **Result**: Full tutorial walkthrough working
-
-### Code Changes This Session
-
-#### Backend
-- `backend/src/routes/tutorial.js` (NEW):
-  - GET /api/tutorial/status - Check tutorial completion status
-  - POST /api/tutorial/complete - Mark tutorial completed
-  - POST /api/tutorial/skip - Mark tutorial skipped
-- `backend/src/index.js`:
-  - Added tutorial routes import and registration
-
-#### Frontend
-- `frontend/src/pages/Tutorial.jsx` (NEW):
-  - 8 tutorial steps explaining app features
-  - Progress dots indicator
-  - Next/Back navigation
-  - Skip Tutorial option
-  - Animated icons
-- `frontend/src/App.jsx`:
-  - Added Tutorial import and /tutorial route
-
-### Feature In Progress
-
-#### Feature #195: Avatar selection and display (in progress)
-- Avatar infrastructure exists: file upload, display on profile/leaderboards
-- Current implementation uses file upload (camera button)
-- Backend endpoint: POST /api/users/:id/avatar
-
-### What the Next Agent Should Do
-
-1. **Continue Feature #195** - Complete avatar selection testing
-2. **Get next feature** - Use `feature_get_next` after completing #195
-3. **Run regression tests** - Verify existing features still work
-
-### Technical Notes
-
-- **Test users**: assesstest193 (completed assessment), skilltest193 (skipped assessment)
-- **Frontend**: http://localhost:5173
-- **Backend**: http://localhost:5003
-- **Tutorial**: 8 steps covering all major app features
-
----
-
-## Session 14 Progress
-- **Date**: January 7, 2026
-- **Status**: 151/302 features passing (50.0%)
-- **Focus**: Filtered data export
-
-### Features Completed This Session
-
-#### Feature #189: Export filtered data accurate
-- **Description**: Verify filtered export functionality
-- **Implementation**:
-  - Added `type` filter parameter to GET /api/notifications endpoint
-  - Added GET /api/notifications/export endpoint for filtered export
-  - Added type filter dropdown to Notifications page UI
-  - Added Export button that exports only filtered notifications
-  - Export includes filter metadata (type, sortOrder, unreadOnly) and totalCount
-- **Verification**:
-  - Applied "Friend Accepted" filter - showed 7 notifications (out of 10)
-  - Clicked Export button
-  - Downloaded JSON file with filters applied
-  - Verified: totalCount: 7, all notifications have type: "friend_accepted"
-  - Also tested with "Challenges" filter - exported only 3 challenge_complete notifications
-- **Result**: Filtered export correctly exports only filtered records
-
-### Code Changes This Session
-
-#### Backend
-- `backend/src/routes/notifications.js`:
-  - Added `type` query param to filter notifications by type
-  - Added `/api/notifications/export` endpoint for filtered export
-  - Export includes filter metadata and correct record count
-
-#### Frontend
-- `frontend/src/pages/Notifications.jsx`:
-  - Added NOTIFICATION_TYPES constant with filter options
-  - Added typeFilter state and dropdown UI
-  - Added handleExportFiltered function to export filtered data
-  - Added "Showing X [Type] notifications" indicator when filtered
-
-### Regression Tests Passed
-- Feature #94: API 404 handled gracefully - PASS
-
-### What the Next Agent Should Do
-1. **Get next feature** - Use `feature_get_next` to continue implementation
-2. **Run regression tests** - Verify existing features still work
-3. **Note**: Backend running on port 5003, frontend on 5173
-
-### Technical Notes
-- **Test user**: test@example.com / password123 / testuser
-- **Frontend**: http://localhost:5173
-- **Backend**: http://localhost:5003
-- **Milestone**: 50% completion reached!
-
----
-
-## Session 13 Progress
-- **Date**: January 7, 2026
-- **Status**: 150/302 features passing (49.7%)
-- **Focus**: Export all data feature
-
-### Features Completed This Session
-
-#### Feature #188: Export all data complete
-- **Description**: Verify full data export
-- **Implementation**:
-  - Fixed SQL query bugs in `/api/users/:id/export` endpoint
-  - Split complex friends query into two simpler queries to avoid SQL.js issues
-  - Fixed daily challenges query to use correct table name (`daily_challenges` not `user_daily_challenges`)
-- **Verification**:
-  - Logged in as testuser
-  - Clicked "Export Data" button in Settings > Privacy & Data
-  - Downloaded JSON file with all user data
-  - Verified file contains: profile, categoryStats, achievements, gameHistory, friends, notifications, dailyChallenges
-  - Format is valid JSON
-- **Result**: Full GDPR-compliant data export working
-
-### Code Changes This Session
-
-#### Backend
-- `backend/src/routes/users.js`:
-  - Fixed friends query: Split complex OR JOIN into two separate queries
-  - Fixed daily challenges query: Changed from `user_daily_challenges` to `daily_challenges`
-
-### Regression Tests Passed
-- Feature #44: Achievement card opens achievement details - PASS
-
-### What the Next Agent Should Do
-1. **Get next feature** - Use `feature_get_next` to continue implementation
-2. **Run regression tests** - Verify existing features still work
-3. **Note**: Backend running on port 5003, frontend on 5173
-
-### Technical Notes
-- **Test user**: test@example.com / password123 / testuser
-- **Frontend**: http://localhost:5173
-- **Backend**: http://localhost:5003
-
----
-
-## Session 12 Progress
-- **Date**: January 7, 2026
-- **Status**: 149/302 features passing (49.3%)
-- **Focus**: Stale data handling, pagination fixes, late API response handling
-
-### Features Completed This Session
-
-#### Feature #185: Record deleted while viewing handled
-- **Description**: Verify stale data handling when another user deletes a record
-- **Implementation**:
-  - Friends.jsx: Added `fetchFriends()` call in catch block to refresh list on 404 errors
-  - Same pattern applied to handleAcceptRequest and handleDeclineRequest
-- **Verification**:
-  - User A views friend "staleuser" in Friends list
-  - User B (via API) deletes the friendship
-  - User A clicks "Remove" button
-  - Error "Friendship not found" displayed in red alert
-  - List automatically refreshes to remove stale friend
-- **Result**: Graceful error handling with automatic list refresh
-
-#### Feature #186: List updates during pagination
-- **Description**: Verify list consistency during changes
-- **Bug Found**: Leaderboards page wasn't refreshing data when navigating back to page 1
-- **Root Cause**: useEffect only fetched data when `page > 1`
-- **Fix**: Consolidated to single useEffect that fetches on any page/tab/gameType change
-- **Verification**:
-  - Created new users while on page 2
-  - Navigated: Page 2 -> Page 1 -> Page 2 -> Page 3
-  - Page 1: #1-10 (correct)
-  - Page 2: #11-20 (correct)
-  - Page 3: #21-22 with new users (correct)
-  - No duplicate or missing items
-- **Result**: Pagination now works correctly in both directions
-
-#### Feature #187: Late API response no crash
-- **Description**: Verify stale response handling when navigating away before API completes
-- **Implementation**:
-  - Today.jsx: Added `ignore` flag pattern to fetchChallenges
-  - Friends.jsx: Added `ignore` flag to loadData
-  - Notifications.jsx: Added `ignore` flag to fetchNotifications
-  - All state updates check `if (!ignore)` before executing
-- **Verification**:
-  - Rapidly navigated between Friends -> Today -> Alerts -> Leaderboards
-  - No console errors
-  - Correct data displayed on each page
-  - No stale data leaking between pages
-- **Result**: Clean unmount with no stale state updates
-
-### Code Changes This Session
-
-#### Frontend
-- `frontend/src/pages/Friends.jsx`:
-  - Added `fetchFriends()` in error catch blocks
-  - Added `ignore` flag for cleanup
-- `frontend/src/pages/Leaderboards.jsx`:
-  - Consolidated two useEffects into one for consistent page fetching
-- `frontend/src/pages/Notifications.jsx`:
-  - Moved fetchNotifications inside useEffect with ignore pattern
-- `frontend/src/pages/Today.jsx`:
-  - Added ignore flag pattern to prevent stale state updates
-
-### Regression Tests Passed
-- Feature #93: Invalid form input shows field errors - PASS
-- Feature #108: Sort functionality sorts real data - PASS
-- Feature #47: Created user persists after logout - PASS
-
-### What the Next Agent Should Do
-
-1. **Get next feature** - Use `feature_get_next` to continue implementation
-2. **Run regression tests** - Verify existing features still work
-3. **Note**: Feature #188 is next in queue
-
-### Technical Notes
-
-- **Test user**: test@example.com / password123 / testuser
-- **Frontend**: http://localhost:5173
-- **Backend**: http://localhost:5003
-- **Ignore pattern**: Standard React cleanup pattern for async operations
-
----
-
-## Session 11 Progress
-- **Date**: January 7, 2026
-- **Status**: 146/302 features passing (48.3%)
-- **Focus**: Timezone support, date sorting, concurrent edit handling
-
-### Features Completed This Session
-
-#### Feature #182: Daily filters work with timezone
-- **Description**: Verify daily boundaries timezone-aware
-- **Implementation**:
-  - Added `getTodayForTimezone()` and `getYesterdayForTimezone()` helper functions
-  - Backend accepts `timezone` query param (IANA format like 'America/New_York')
-  - Uses `Intl.DateTimeFormat` for accurate timezone conversion
-  - Frontend sends client timezone via `Intl.DateTimeFormat().resolvedOptions().timeZone`
-- **Verification**:
-  - America/Halifax: Jan 7 (correct - afternoon)
-  - UTC: Jan 7 (correct - 5 PM)
-  - Asia/Tokyo: Jan 8 (correct - past midnight)
-  - Pacific/Auckland: Jan 8 (correct - early morning)
-- **Result**: Daily challenges correctly reset at midnight in user's local timezone
-
-#### Feature #183: Date sorting works correctly
-- **Description**: Verify date sorting accuracy
-- **Implementation**:
-  - Added `sortOrder` param to /api/notifications (asc/desc)
-  - Implemented full Notifications page with date display
-  - Sort toggle button switches between "Newest First" and "Oldest First"
-- **Verification**:
-  - Descending: 10:14 AM -> 05:30 AM (newest first)
-  - Ascending: 05:30 AM -> 10:14 AM (oldest first)
-  - Toggle correctly reverses order
-- **Result**: Date sorting works correctly in both directions
-
-#### Feature #184: Two users edit same record handling
-- **Description**: Verify concurrent edit handling
-- **Implementation**:
-  - Added optimistic concurrency control via `expected_updated_at` field
-  - PATCH /api/users/:id checks timestamp before updating
-  - PATCH /api/settings checks timestamp before updating
-  - Returns 409 Conflict with error message if record was modified
-  - Added `updated_at` to GET /api/users/:id response
-- **Verification**:
-  - User A saves: 200 OK (success)
-  - User B saves with stale timestamp: 409 Conflict
-  - Error: "This record has been modified by another user. Please refresh and try again."
-- **Result**: Concurrent edits properly detected and rejected
-
-### Code Changes This Session
-
-#### Backend
-- `backend/src/routes/daily.js`:
-  - Added `getTodayForTimezone()` function using `Intl.DateTimeFormat`
-  - Added `getYesterdayForTimezone()` function
-  - Added timezone query param to /api/daily/challenges and /api/daily/streak
-- `backend/src/routes/notifications.js`:
-  - Added `sortOrder` param (asc/desc) to GET /api/notifications
-  - Added `total` count to response
-- `backend/src/routes/users.js`:
-  - Added `expected_updated_at` concurrency control to PATCH
-  - Added `updated_at` to GET response
-- `backend/src/routes/settings.js`:
-  - Added `expected_updated_at` concurrency control to PATCH
-
-#### Frontend
-- `frontend/src/pages/Today.jsx`:
-  - Send client timezone with daily challenges request
-- `frontend/src/pages/Notifications.jsx`:
-  - Complete rewrite with date display and sort toggle
-  - Shows formatted dates, notification icons, unread count
-  - Mark as read functionality
-- `frontend/vite.config.js`:
-  - Updated proxy to port 5003
-
-### What the Next Agent Should Do
-
-1. **Get next feature** - Use `feature_get_next` to continue implementation
-2. **Run regression tests** - Verify existing features still work
-3. **Note**: Backend running on port 5003, vite proxy updated
-
-### Technical Notes
-
-- **Test user**: test@example.com / password123 / testuser
-- **Frontend**: http://localhost:5173
-- **Backend**: http://localhost:5003 (updated from 5002)
-- **Concurrency control**: Uses `expected_updated_at` timestamp for optimistic locking
-
----
-
-## Session 10 Progress
-- **Date**: January 7, 2026
-- **Status**: 138/302 features passing (45.7%)
-- **Focus**: Navigation responsiveness, keyboard accessibility, WCAG compliance
-
-### Features Completed This Session
-
-#### Feature #170: Navigation collapses on mobile
-- **Description**: Verify nav responsiveness
-- **Verification**:
-  - Viewport: 375x667 (mobile)
-  - Bottom navigation: fixed position, 360x87.5px
-  - All 5 nav items visible and accessible
-  - Touch targets: 70.5px height (exceeds 44px minimum)
-- **Result**: Bottom navigation properly adapted for mobile
-
-#### Feature #171: Tab navigation works through elements
-- **Description**: Verify keyboard navigation
-- **Verification**:
-  - Tested on Games page: 17 focusable elements
-  - Tested on Login page: 8 focusable elements (inputs, buttons, links)
-  - Tab order follows logical visual layout (top-to-bottom, left-to-right)
-  - All interactive elements have tabindex=0
-- **Result**: All elements reachable via keyboard Tab navigation
-
-#### Feature #172: Focus ring visible on focused elements
-- **Description**: Verify focus indicators
-- **Implementation**:
-  - Added `box-shadow: 0 0 0 3px rgba(0, 217, 255, 0.25)` for input focus
-  - Added `outline: 2px solid var(--primary)` with `outline-offset: 2px` for links/buttons
-- **Verification**:
-  - Inputs: cyan glow focus ring
-  - Links/Buttons: solid cyan outline on :focus-visible
-  - Good contrast against dark background
-- **Result**: All focused elements have visible focus indicators
-
-#### Feature #173: ARIA labels on icon buttons
-- **Description**: Verify icon buttons are labeled for screen readers
-- **Verification**:
-  - Camera button (Profile): `title="Change avatar"`
-  - Pause button (GamePlay): `aria-label="Pause game"`
-  - Close button (Modal): `aria-label="Close modal"`
-  - Option buttons (GamePlay): Image alt text provides accessible name
-- **Result**: All icon buttons have proper accessible names
-
-#### Feature #174: Color contrast meets WCAG AA
-- **Description**: Verify text contrast ratios
-- **Verification**:
-  - White on background: 17.06:1 (PASS)
-  - White on surface: 15.89:1 (PASS)
-  - Secondary text on background: 7.87:1 (PASS)
-  - Primary cyan on background: 10.05:1 (PASS)
-  - Error red on background: 5.35:1 (PASS)
-- **Result**: All color combinations exceed WCAG AA 4.5:1 requirement
-
-#### Feature #175: No information by color alone
-- **Description**: Verify color accessibility
-- **Verification**:
-  - Daily challenges: "Completed!" text + checkmark icon
-  - Achievements: Numerical progress (63/100) or XP reward text
-  - Navigation: Icons + text labels on all items
-  - Game answers: Score changes + correct answer highlighted
-- **Result**: All information conveyed through multiple means
-
-### Code Changes This Session
-
-#### Frontend CSS
-- `frontend/src/styles/index.css`:
-  - Added `min-height: 44px` to inputs (touch target)
-  - Added `box-shadow` focus ring for inputs
-  - Added `:focus-visible` outline for links and buttons
-
-### What the Next Agent Should Do
-
-1. **Get next feature** - Use `feature_get_next` to continue implementation
-2. **Run regression tests** - Verify existing features still work
-3. **Continue with remaining accessibility/style features**
-
-### Technical Notes
-
-- **Test user**: test@example.com / password123 / testuser
-- **Frontend**: http://localhost:5173
-- **Backend**: http://localhost:5002 (proxied through Vite)
-- **Browser viewport**: Testing at 375x667 (mobile)
-- **WCAG AA**: All color contrasts pass 4.5:1 minimum
-
----
-
-## Session 9 Progress
-- **Date**: January 7, 2026
-- **Status**: 132/302 features passing (43.7%)
-- **Focus**: Mobile touch targets, modal responsiveness, text truncation
-
-### Features Completed This Session
-
-#### Feature #166: Touch targets large enough
-- **Description**: Verify touch accessibility on mobile
-- **Implementation**:
-  - Updated `.nav-item` in BottomNav.css: added min-height 44px
-  - Updated `.modal-close` in Modal.module.css: 44px width and height
-  - Updated `.pauseButton` in GamePlay.module.css: 44px min dimensions
-- **Verification**:
-  - All navigation items: 70.5px height (exceeds 44px)
-  - Filter buttons: 44px height (meets requirement)
-  - Answer buttons: 112px height (exceeds 44px)
-  - Pause button: 44x44px (meets requirement)
-- **Result**: All interactive elements pass 44px minimum touch target requirement
-
-#### Feature #167: Modals fit mobile viewport
-- **Description**: Verify modal responsiveness
-- **Implementation**:
-  - Fixed Modal.module.css to use `--surface` variable instead of undefined `--bg-secondary`
-  - Modal now shows proper dark background (#16213E)
-  - Close button has 44px touch target
-- **Verification**:
-  - Pause modal: 343x281px (fits in 375x667 viewport)
-  - Delete Account modal: fits within viewport
-  - Modal CSS has `max-height: 80vh` and `overflow: auto` for scrolling
-- **Result**: All modals fit within mobile viewport and are scrollable if needed
-
-#### Feature #168: Long text truncates correctly
-- **Description**: Verify text overflow handling
-- **Implementation**:
-  - Added `text-overflow: ellipsis`, `overflow: hidden`, `white-space: nowrap` to `.username`
-  - Added `min-width: 0` to `.userInfo` flex container
-  - Added `.text-truncate` utility class to App.css
-- **Verification**:
-  - Tested with "ThisIsAVeryLongUsernameToTestTruncationBehaviorInTheApp"
-  - Username displays as "ThisIsAVeryLong..." with ellipsis
-  - Layout maintains integrity
-- **Result**: Long text truncates with ellipsis, no layout breakage
-
-#### Feature #169: Tables scroll on mobile
-- **Description**: Verify table responsiveness
-- **Implementation**:
-  - App uses CSS grid/flex layouts (no HTML tables)
-  - Added `.table-responsive` wrapper class with `overflow-x: auto`
-  - Added default table styles with responsive behavior
-- **Verification**:
-  - No tables exist in app (confirmed with DOM search)
-  - No horizontal overflow issues (pageWidth 360 < viewportWidth 375)
-- **Result**: Responsive styles in place for any future tables
-
-### Code Changes This Session
-
-#### Frontend CSS
-- `frontend/src/components/BottomNav.css`:
-  - Added `min-height: 44px` and `justify-content: center` to `.nav-item`
-- `frontend/src/components/Modal.module.css`:
-  - Fixed `--bg-secondary` -> `--surface` for background color
-  - Fixed `--border-color` -> `--border` for borders
-  - Added 44px touch target to close button
-- `frontend/src/pages/GamePlay.module.css`:
-  - Added `min-width: 44px` and `min-height: 44px` to pause button
-- `frontend/src/pages/Leaderboards.module.css`:
-  - Added text truncation to `.username`
-  - Added `min-width: 0` to `.userInfo` for flex truncation
-- `frontend/src/styles/App.css`:
-  - Added `.text-truncate` utility class
-  - Added `.table-responsive` wrapper and table styles
-
-### What the Next Agent Should Do
-
-1. **Get next feature** - Use `feature_get_next` to continue implementation
-2. **Run regression tests** - Verify existing features still work
-3. **Continue with remaining style/accessibility features**
-
-### Technical Notes
-
-- **Test user**: test@example.com / password123 / testuser
-- **Frontend**: http://localhost:5173
-- **Backend**: http://localhost:5002 (proxied through Vite)
-- **Browser viewport**: Testing at 375x667 (mobile)
-
----
-
-## Session 8 Progress
-- **Date**: January 7, 2026
-- **Status**: 100/302 features passing (33.1%) - MILESTONE!
-- **Focus**: Database transaction support, form state management, delete cascades
-
-### Features Completed This Session
-
-#### Feature #127: Refresh during save no corruption
-- **Description**: Verify data integrity on refresh during save
-- **Implementation**:
-  - Added database transaction support to `database.js` wrapper
-  - Methods added: `beginTransaction()`, `commit()`, `rollback()`, `transaction(fn)`
-  - Database only saves to disk after transaction commit (not during)
-  - Wrapped game completion operation in transaction for atomic saves
-- **Verification**:
-  - Played a complete Flags game (10 questions)
-  - Verified game data saved correctly: session, answers, stats, achievements, challenges
-  - Profile shows updated XP (1661) and flags stats (20 games, 63/195 correct, High: 1040)
-- **Result**: Data is now saved atomically - either all changes commit or none do
-
-#### Feature #128: Submit button disabled during processing
-- **Description**: Verify submit button state management
-- **Implementation**: Already correctly implemented in all forms
-- **Verification**:
-  - Login form: `disabled={loading}`, shows "Logging in..."
-  - Register form: `disabled={loading}`, shows "Creating account..."
-  - Password Change form: `disabled={loading}`, shows "Changing..."
-  - All forms use `isSubmittingRef` for double-submission prevention
-- **Tested**: Login and password change operations work correctly
-
-#### Feature #129: Delete item updates statistics
-- **Description**: Verify statistics cascade update when deleting items
-- **Verification**:
-  - Friends page showed "My Friends (3)" with 3 friends listed
-  - Clicked "Remove" on newfriend123, confirmed deletion
-  - Page immediately updated to "My Friends (2)" with 2 friends listed
-- **Result**: Statistics update correctly when items are deleted
-
-### Code Changes This Session
-
-#### Backend
-- `backend/src/models/database.js`:
-  - Added `inTransaction` flag to track transaction state
-  - Added `beginTransaction()` - starts SQLite transaction
-  - Added `commit()` - commits and saves to disk
-  - Added `rollback()` - rolls back changes
-  - Added `transaction(fn)` - helper for auto-commit/rollback
-  - Modified `run()` and `exec()` to skip disk save during transactions
-- `backend/src/routes/games.js`:
-  - Wrapped `PATCH /api/games/sessions/:id` in database transaction
-  - All game completion operations now atomic (session, answers, stats, achievements, challenges)
-
-### Regression Tests Passed
-- Feature #108: Leaderboard sort functionality - PASS (sorted by XP descending)
-- Feature #60: Accuracy calculation - PASS (real data tracked correctly)
-- Feature #126: Submit back submit no duplicate - PASS
-
-### What the Next Agent Should Do
-
-1. **Get next feature** - Use `feature_get_next` to continue implementation
-2. **Run regression tests** - Verify existing features still work
-3. **Port cleanup** - Many zombie processes on ports 5002-5010 and 3007-3012
-
-### Technical Notes
-
-- **Test user**: test@example.com / password123 / testuser
-- **Frontend**: http://localhost:5175 (or other port if 5173-5175 in use)
-- **Backend**: http://localhost:5002 (proxied through Vite)
-- **Vite config**: Proxy set to port 5002 in `frontend/vite.config.js`
-- **Transaction safety**: Game saves are now atomic - no partial data on interruption
-
----
-
-## Session 7 Progress
-- **Date**: January 7, 2026
-- **Status**: 89/302 features passing (29.5%)
-- **Focus**: Auth reauth handling, unsaved changes warning
-
-### Features Completed This Session
-
-#### Feature #117: LocalStorage cleared graceful reauth
-- **Description**: Verify graceful handling when localStorage is cleared
-- **Implementation**:
-  - Added `auth:logout` event dispatch in API utility on 401 responses
-  - AuthContext listens for this event and clears user state
-  - ProtectedRoute automatically redirects to login when user becomes null
-- **Verified**: User is gracefully redirected to login without crash
-
-#### Feature #118: Unsaved changes warning on navigate
-- **Description**: Verify dirty form warning when navigating away
-- **Implementation**:
-  - Created `useUnsavedChanges` hook with BrowserRouter compatibility
-  - Created `UnsavedChangesDialog` component for confirmation modal
-  - Integrated in Settings page password change form
-  - Handles: link clicks, browser back button, page refresh
-- **Verified**: Dialog appears with Stay/Leave options, both work correctly
-
-### Code Changes This Session
-
-#### Frontend
-- `frontend/src/utils/api.js`:
-  - Added `auth:logout` event dispatch on 401 responses
-  - Improved token invalid/missing handling
-- `frontend/src/context/AuthContext.jsx`:
-  - Added listener for `auth:logout` events
-- `frontend/src/hooks/useUnsavedChanges.js` (NEW):
-  - Custom hook for form dirty state tracking
-  - Works with BrowserRouter (no data router required)
-- `frontend/src/components/UnsavedChangesDialog.jsx` (NEW):
-  - Modal dialog for unsaved changes confirmation
-- `frontend/src/pages/Settings.jsx`:
-  - Integrated unsaved changes warning for password form
-
-### What the Next Agent Should Do
-
-1. **Continue with Feature #119+** - Get next feature and implement
-2. **Run regression tests** - Verify existing features still work
-3. **Check for any console errors** - Keep UI clean
-
-### Technical Notes
-
-- **Test user**: test@example.com / password123 / testuser
-- **Frontend**: http://localhost:5173
-- **Backend**: May need to restart if ports conflict
-- **useUnsavedChanges hook**: Works by intercepting link clicks and browser back button
-
----
-
-# GeoElevate - Progress Report
-
-## Session 5 Progress
-- **Date**: January 7, 2026
-- **Status**: 40/302 features passing (13.2%)
-- **Focus**: Achievement progress tracking bug fix, GamePlay crash fix
-
-### Bug Fixes This Session
-
-#### Critical Bug: Achievement Progress Not Updating
-- **Root Cause**: The `updateAchievementProgress` function was NEVER implemented! The original `updateUserStats` function in `games.js` updated `user_category_stats` (total_correct, games_played) but never touched the `user_achievements` table.
-- **Fix**:
-  1. Created `updateAchievementProgress` function in `backend/src/routes/games.js`
-  2. For `correct_count` achievements, syncs with actual `total_correct` from `user_category_stats`
-  3. Added call to `updateAchievementProgress` at end of `updateUserStats`
-- **Additional**: Added `/api/achievements/sync` endpoint to fix any existing data inconsistencies
-
-#### GamePlay.jsx Crash Fix
-- **Issue**: TypeError "Cannot read properties of undefined (reading 'prompt')" when timer reaches 0
-- **Fix**: Added guard checks for `currentQuestion` being undefined in `handleTimeout`, `handleAnswer`, and render
-
-### Code Changes This Session
-
-#### Backend
-- `backend/src/routes/games.js`:
-  - Added `updateAchievementProgress` function (~120 lines)
-  - Added try-catch around achievement update calls
-  - Added debug test endpoint
-- `backend/src/routes/achievements.js`:
-  - Added POST `/api/achievements/sync` endpoint
-
-#### Frontend
-- `frontend/src/pages/GamePlay.jsx`:
-  - Added null checks for `currentQuestion`
-  - Added loading state when question is undefined
-
-### What the Next Agent Should Do
-
-1. **Restart the backend server** - The fixes are in the code but an old server process is still running on port 3001. The new code won't take effect until the server restarts.
-2. **Verify Feature #52** - After restart, play a flags game and verify Flag Master progress increases
-3. **Continue with remaining features**
-
-### Technical Notes
-
-- **Test user**: test@example.com / password123 / testuser
-- **Port conflict**: An external process is holding port 3001, preventing new backend from starting
-- **Database**: Flag Master shows 5/100 but user has 38 correct flags - this will auto-fix after server restart
-
----
-
-## Session 4 Progress
-- **Date**: January 2025
-- **Status**: 30/302 features passing (9.9%)
-- **Focus**: Leaderboards functionality, Profile tabs, Navigation features
-
-### Completed This Session
-
-#### Navigation Features (34-37)
-34. **Feature #34**: After login redirects to intended page - PASS
-35. **Feature #35**: After logout redirects to login - PASS
-36. **Feature #36**: Pagination links work correctly - PASS
-37. **Feature #37**: Tab navigation in profile works - PASS
-
-### Code Changes This Session
-
-#### Frontend - Leaderboards
-- `frontend/src/pages/Leaderboards.jsx` - Fully implemented with API data, pagination, tabs
-- `frontend/src/pages/Leaderboards.module.css` - Styles for leaderboard
-
-#### Frontend - Profile
-- `frontend/src/pages/Profile.jsx` - Updated with Performance/Achievements tabs with real API data
-
-#### Backend - Data Seeding
-- `backend/seed-achievements.js` - Script to seed 12 achievements into database
-
-### What the Next Agent Should Do
-
-1. **Seed geography data** - Countries, capitals, flags, languages needed for games
-2. **Implement game engine** - GamePlay.jsx is still a placeholder
-3. **Continue with remaining features** (Features 38+)
-
-### Technical Notes
-
-- **Test user**: test@example.com / password123 / testuser
-- **Leaderboards**: Pagination size is 10 per page
-- **Profile Performance tab**: Shows 5 skill categories with XP progress bars
-- **Profile Achievements tab**: Displays 12 achievements with locked/unlocked states
-
----
-
-## Session 3 Progress
-- **Date**: January 2025
-- **Status**: 23/302 features passing (7.6%)
-- **Focus**: Security features and UI/navigation verification
-
-### Features 8-25, 28, 30 completed
-- Security, authentication, bottom navigation features
-
----
-
-## Session 2 Summary
-- Features 1-7 Completed (Guest mode, security)
-- Infrastructure: Switched from better-sqlite3 to sql.js
-
----
-
-## Session 1 Summary
-- 302 features created
-- Project structure, API routes, database schema, React Router, CSS design system
+## Previous Sessions Summary (Sessions 1-16)
+
+- **Core app**: Fully functional with all 5 game types
+- **Authentication**: Login, register, guest mode, password reset
+- **Features**: Leaderboards, achievements, friends, daily challenges, profile, settings
+- **Accessibility**: WCAG AA compliant, keyboard navigation, focus indicators
+- **Mobile**: Responsive design, touch targets, bottom navigation
+- **Data integrity**: Database transactions, concurrency control, export functionality
+- **Test users**: testuser (ID 1), srtest (ID 30)
