@@ -4,6 +4,36 @@ import { authenticate, optionalAuthenticate } from '../middleware/auth.js';
 
 const router = Router();
 
+// Daily XP cap per game type (encourages variety)
+const DAILY_XP_CAP = 500;
+
+/**
+ * Get remaining XP that can be earned today for a game type.
+ *
+ * @param {Database} db - Database instance
+ * @param {number} userId - User ID
+ * @param {string} gameType - Type of game
+ * @returns {{ earnedToday: number, remaining: number, capped: boolean }}
+ */
+function getDailyXpStatus(db, userId, gameType) {
+    const today = new Date().toISOString().split('T')[0];
+
+    const result = db.prepare(`
+        SELECT COALESCE(SUM(xp_earned), 0) as earned_today
+        FROM game_sessions
+        WHERE user_id = ? AND game_type = ? AND DATE(completed_at) = ?
+    `).get(userId, gameType, today);
+
+    const earnedToday = result?.earned_today || 0;
+    const remaining = Math.max(0, DAILY_XP_CAP - earnedToday);
+
+    return {
+        earnedToday,
+        remaining,
+        capped: remaining === 0
+    };
+}
+
 /**
  * Get available game types.
  * GET /api/games/types
@@ -215,21 +245,42 @@ router.patch('/sessions/:id', authenticate, (req, res, next) => {
 
     try {
         const { id } = req.params;
-        const { answers, score, xpEarned, correctCount: rawCorrectCount, averageTimeMs } = req.body;
+        const { answers, score, xpEarned: requestedXp, correctCount: rawCorrectCount, averageTimeMs } = req.body;
 
         // Calculate correctCount from answers if not provided
         const correctCount = rawCorrectCount ?? (answers ? answers.filter(a => a.isCorrect).length : 0);
         console.log('PATCH session - rawCorrectCount:', rawCorrectCount, 'calculatedCorrectCount:', correctCount);
 
         // Verify session belongs to user (before transaction)
-        const session = db.prepare(
+        const sessionFull = db.prepare(
             'SELECT * FROM game_sessions WHERE id = ? AND user_id = ?'
         ).get(id, req.userId);
 
-        if (!session) {
+        if (!sessionFull) {
             return res.status(404).json({
                 error: { message: 'Game session not found' }
             });
+        }
+
+        // Apply daily XP cap for this game type
+        let xpEarned = requestedXp;
+        let xpCapInfo = null;
+
+        if (req.userId) {
+            const xpStatus = getDailyXpStatus(db, req.userId, sessionFull.game_type);
+            if (xpStatus.remaining < requestedXp) {
+                xpEarned = xpStatus.remaining;
+                xpCapInfo = {
+                    capped: true,
+                    earnedToday: xpStatus.earnedToday,
+                    maxDaily: DAILY_XP_CAP,
+                    reducedFrom: requestedXp,
+                    reducedTo: xpEarned,
+                    message: xpEarned === 0
+                        ? `You've reached your daily XP cap for ${sessionFull.game_type}! Try a different game type.`
+                        : `XP reduced due to daily cap. Only ${xpEarned} XP awarded.`
+                };
+            }
         }
 
         // Begin transaction for atomic game completion
@@ -267,18 +318,23 @@ router.patch('/sessions/:id', authenticate, (req, res, next) => {
             }
 
             // Update user stats
-            console.log('Updating stats - gameType:', session.game_type, 'correctCount:', correctCount, 'totalQuestions:', answers?.length || 10);
-            updateUserStats(db, req.userId, session.game_type, score, xpEarned, correctCount, answers?.length || 10);
+            console.log('Updating stats - gameType:', sessionFull.game_type, 'correctCount:', correctCount, 'totalQuestions:', answers?.length || 10);
+            updateUserStats(db, req.userId, sessionFull.game_type, score, xpEarned, correctCount, answers?.length || 10);
 
             // Update spaced repetition data for each answered question
             if (answers && Array.isArray(answers)) {
-                updateSpacedRepetition(db, req.userId, session.game_type, answers);
+                updateSpacedRepetition(db, req.userId, sessionFull.game_type, answers);
             }
 
             // Commit transaction - all changes saved atomically
             db.commit();
 
-            res.json({ message: 'Game session completed', sessionId: id });
+            res.json({
+                message: 'Game session completed',
+                sessionId: id,
+                xpEarned,
+                xpCapInfo
+            });
         } catch (txErr) {
             // Rollback on any error - no partial data saved
             db.rollback();
@@ -977,6 +1033,8 @@ function updateAchievementProgress(db, userId, gameType, correctCount, totalQues
             }
 
             const unlocked = newProgress >= achievement.requirement_value;
+            const wasAlreadyUnlocked = existing && existing.unlocked_at !== null;
+            const justUnlocked = unlocked && !wasAlreadyUnlocked;
 
             if (existing) {
                 db.prepare(`
@@ -998,6 +1056,20 @@ function updateAchievementProgress(db, userId, gameType, correctCount, totalQues
                     newProgress,
                     unlocked ? new Date().toISOString() : null
                 );
+            }
+
+            // Create notification for newly unlocked achievement
+            if (justUnlocked) {
+                db.prepare(`
+                    INSERT INTO notifications (user_id, type, title, body, data_json)
+                    VALUES (?, 'achievement_unlock', ?, ?, ?)
+                `).run(
+                    userId,
+                    'Achievement Unlocked!',
+                    `You earned "${achievement.name}" - ${achievement.description}`,
+                    JSON.stringify({ achievementId: achievement.id, xpReward: achievement.xp_reward })
+                );
+                console.log('Achievement unlocked notification created:', achievement.name);
             }
         }
     }
