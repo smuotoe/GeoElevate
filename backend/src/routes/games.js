@@ -1232,6 +1232,22 @@ function updateAchievementProgress(db, userId, gameType, correctCount, totalQues
                     JSON.stringify({ achievementId: achievement.id, xpReward: achievement.xp_reward })
                 );
                 console.log('Achievement unlocked notification created:', achievement.name);
+
+                // Create activity feed entry for friends to see
+                db.prepare(`
+                    INSERT INTO activity_feed (user_id, activity_type, data_json)
+                    VALUES (?, 'achievement_unlocked', ?)
+                `).run(
+                    userId,
+                    JSON.stringify({
+                        achievementId: achievement.id,
+                        achievementName: achievement.name,
+                        achievementDescription: achievement.description,
+                        achievementIcon: achievement.icon,
+                        xpReward: achievement.xp_reward
+                    })
+                );
+                console.log('Activity feed entry created for achievement:', achievement.name);
             }
         }
     }
