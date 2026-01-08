@@ -1,5 +1,55 @@
 # GeoElevate - Progress Report
 
+## Session 31 Progress
+- **Date**: January 8, 2026
+- **Status**: 272/302 features passing (90.1%)
+- **Focus**: Notifications and Activity Feed
+
+### Features Completed This Session
+
+#### Feature #61: Multiplayer match result persists
+- **Implementation**:
+  - Added GET /api/multiplayer/history endpoint to return completed matches
+  - Added Match History section to Multiplayer.jsx frontend
+  - Displays game type, scores, Won/Lost status, and dates
+  - Clickable cards navigate to match details
+- **Files Modified**:
+  - `backend/src/routes/multiplayer.js` - Added history endpoint
+  - `frontend/src/pages/Multiplayer.jsx` - Added Match History UI
+- **Verification**:
+  - Created test match data using seed script
+  - Verified match history displays correctly with proper styling
+- **Result**: Match history fully functional
+
+#### Feature #63: Notification created for real events
+- **Implementation**:
+  - Added `notifyFriendsOfBeatenScore()` function to games.js
+  - When user beats a friend's high score, friend receives notification
+  - Notification contains username, game type, and both scores
+- **Files Modified**:
+  - `backend/src/routes/games.js` - Added score beaten notification logic
+- **Verification**:
+  - Set up friendship between testjan8 and user 20
+  - Played game scoring above friend's high score
+  - Verified notification created with correct data
+- **Result**: Score beaten notifications working
+
+#### Feature #67: Activity feed shows real friend activities
+- **Implementation**:
+  - Added activity feed entry creation when achievements are unlocked
+  - Activity feed API (`/api/friends/activity-feed`) returns friend activities
+  - Entries include achievement name, description, icon, XP reward
+- **Files Modified**:
+  - `backend/src/routes/games.js` - Added activity feed entry on achievement unlock
+- **Verification**:
+  - Created new test user (activitytest) as friend of testjan8
+  - testjan8 unlocked "Perfect Game" achievement
+  - activitytest's activity feed showed the achievement unlock
+  - Timestamp accurate
+- **Result**: Activity feed fully functional
+
+---
+
 ## Session 30 Progress
 - **Date**: January 8, 2026
 - **Status**: 269/302 features passing (89.1%)
