@@ -582,6 +582,19 @@ function createTables() {
         )
     `);
 
+    // Password reset tokens table
+    db.run(`
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            token TEXT NOT NULL UNIQUE,
+            expires_at DATETIME NOT NULL,
+            used INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    `);
+
     // Create indexes for performance
     db.run('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)');
     db.run('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)');

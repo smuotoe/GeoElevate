@@ -109,6 +109,9 @@ function Login() {
                     </div>
                 </form>
 
+                <p className="form-footer" style={{ marginBottom: '0.5rem' }}>
+                    <Link to="/forgot-password">Forgot your password?</Link>
+                </p>
                 <p className="form-footer">
                     Don't have an account? <Link to="/register">Sign up</Link>
                 </p>

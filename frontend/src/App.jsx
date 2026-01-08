@@ -4,6 +4,8 @@ import { useAuth } from "./context/AuthContext"
 // Pages
 import Login from "./pages/Login"
 import Register from "./pages/Register"
+import ForgotPassword from "./pages/ForgotPassword"
+import ResetPassword from "./pages/ResetPassword"
 import Today from "./pages/Today"
 import Games from "./pages/Games"
 import GamePlay from "./pages/GamePlay"
@@ -49,6 +51,8 @@ function App() {
                     {/* Public auth routes */}
                     <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
                     <Route path="/register" element={user ? <Navigate to="/" /> : <Register />} />
+                    <Route path="/forgot-password" element={user ? <Navigate to="/" /> : <ForgotPassword />} />
+                    <Route path="/reset-password" element={user ? <Navigate to="/" /> : <ResetPassword />} />
 
                     {/* Guest-accessible routes (no login required) */}
                     <Route path="/" element={<Today />} />
