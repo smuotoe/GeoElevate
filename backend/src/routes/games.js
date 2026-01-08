@@ -139,12 +139,13 @@ router.get('/questions', optionalAuthenticate, (req, res, next) => {
 
         const db = getDb();
         const questionCount = Math.min(parseInt(count), 20);
+        const userId = req.userId || null; // From optionalAuthenticate
 
         let questions = [];
 
         switch (type) {
             case 'flags':
-                questions = generateFlagQuestions(db, mode, region, questionCount, difficulty);
+                questions = generateFlagQuestions(db, mode, region, questionCount, difficulty, userId);
                 break;
             case 'capitals':
                 questions = generateCapitalQuestions(db, mode, region, questionCount, difficulty);
@@ -269,6 +270,11 @@ router.patch('/sessions/:id', authenticate, (req, res, next) => {
             console.log('Updating stats - gameType:', session.game_type, 'correctCount:', correctCount, 'totalQuestions:', answers?.length || 10);
             updateUserStats(db, req.userId, session.game_type, score, xpEarned, correctCount, answers?.length || 10);
 
+            // Update spaced repetition data for each answered question
+            if (answers && Array.isArray(answers)) {
+                updateSpacedRepetition(db, req.userId, session.game_type, answers);
+            }
+
             // Commit transaction - all changes saved atomically
             db.commit();
 
@@ -359,45 +365,89 @@ function getDifficultyFilter(db, difficulty) {
 }
 
 /**
- * Generate flag questions.
+ * Generate flag questions with spaced repetition prioritization.
  *
  * @param {Database} db - Database instance
  * @param {string} mode - Question mode
  * @param {string} region - Region filter
  * @param {number} count - Number of questions
  * @param {string} difficulty - Difficulty level
+ * @param {number|null} userId - User ID for spaced repetition (null if not logged in)
  * @returns {Array} Array of questions
  */
-function generateFlagQuestions(db, mode, region, count, difficulty) {
+function generateFlagQuestions(db, mode, region, count, difficulty, userId = null) {
     const diffFilter = getDifficultyFilter(db, difficulty);
+    let countries = [];
 
-    let query = `
-        SELECT c.id, c.name, c.code, c.population, f.image_url
-        FROM countries c
-        JOIN flags f ON f.country_id = c.id
-        WHERE c.population IS NOT NULL
-    `;
+    // If user is logged in, prioritize due review items
+    if (userId) {
+        const now = new Date().toISOString();
+        // Get countries that need review (next_review_at is in the past or have been answered wrong)
+        let dueQuery = `
+            SELECT c.id, c.name, c.code, c.population, f.image_url,
+                   ufp.times_wrong, ufp.next_review_at, ufp.ease_factor
+            FROM countries c
+            JOIN flags f ON f.country_id = c.id
+            JOIN user_fact_progress ufp ON ufp.fact_id = c.id
+                AND ufp.user_id = ? AND ufp.fact_type = 'flags'
+            WHERE c.population IS NOT NULL
+                AND (ufp.next_review_at <= ? OR ufp.times_wrong > ufp.times_correct)
+        `;
+        const dueParams = [userId, now];
 
-    const params = [];
-    if (region) {
-        query += ' AND c.continent = ?';
-        params.push(region);
+        if (region) {
+            dueQuery += ' AND c.continent = ?';
+            dueParams.push(region);
+        }
+
+        // Priority: items with more wrong answers first, then by next_review_at
+        dueQuery += ' ORDER BY ufp.times_wrong DESC, ufp.next_review_at ASC LIMIT ?';
+        dueParams.push(Math.ceil(count / 2)); // Get up to half from due items
+
+        const dueCountries = db.prepare(dueQuery).all(...dueParams);
+        countries = [...dueCountries];
     }
 
-    // Apply difficulty-based population filter
-    if (diffFilter.minPop !== null) {
-        query += ' AND c.population >= ?';
-        params.push(diffFilter.minPop);
-    }
-    if (diffFilter.maxPop !== null) {
-        query += ' AND c.population <= ?';
-        params.push(diffFilter.maxPop);
+    // Fill remaining slots with regular questions
+    const remaining = count - countries.length;
+    if (remaining > 0) {
+        const usedIds = countries.map(c => c.id);
+        let query = `
+            SELECT c.id, c.name, c.code, c.population, f.image_url
+            FROM countries c
+            JOIN flags f ON f.country_id = c.id
+            WHERE c.population IS NOT NULL
+        `;
+
+        const params = [];
+        if (usedIds.length > 0) {
+            query += ` AND c.id NOT IN (${usedIds.map(() => '?').join(',')})`;
+            params.push(...usedIds);
+        }
+        if (region) {
+            query += ' AND c.continent = ?';
+            params.push(region);
+        }
+
+        // Apply difficulty-based population filter
+        if (diffFilter.minPop !== null) {
+            query += ' AND c.population >= ?';
+            params.push(diffFilter.minPop);
+        }
+        if (diffFilter.maxPop !== null) {
+            query += ' AND c.population <= ?';
+            params.push(diffFilter.maxPop);
+        }
+
+        query += ` ORDER BY ${diffFilter.orderBy} LIMIT ?`;
+        params.push(remaining);
+
+        const additionalCountries = db.prepare(query).all(...params);
+        countries = [...countries, ...additionalCountries];
     }
 
-    query += ` ORDER BY ${diffFilter.orderBy} LIMIT ?`;
-    params.push(count);
-
-    const countries = db.prepare(query).all(...params);
+    // Shuffle the combined list to avoid predictable order
+    countries = countries.sort(() => Math.random() - 0.5);
 
     // Get all countries for wrong answers
     const allCountries = db.prepare(`
@@ -1039,6 +1089,99 @@ function updateDailyChallengeProgress(db, userId, gameType, correctCount, totalQ
                     VALUES (?, 'challenge_complete', 'Challenge Complete!', ?)
                 `).run(userId, `You earned ${challenge.xp_reward} XP for completing "${challenge.challenge_type}"!`);
             }
+        }
+    }
+}
+
+/**
+ * Update spaced repetition data for answered questions using SM-2 algorithm.
+ * This tracks which facts the user knows well vs needs more practice on.
+ *
+ * @param {object} db - Database instance
+ * @param {number} userId - User ID
+ * @param {string} gameType - Type of game (flags, capitals, etc.)
+ * @param {Array} answers - Array of answer objects with question data and correctness
+ */
+function updateSpacedRepetition(db, userId, gameType, answers) {
+    const now = new Date().toISOString();
+
+    for (const answer of answers) {
+        // Get the fact ID from the question (countryId for most game types)
+        const factId = answer.question?.countryId ||
+                       answer.question?.languageId ||
+                       answer.question?.triviaId;
+
+        if (!factId) continue;
+
+        const factType = gameType; // flags, capitals, maps, languages, trivia
+
+        // Check if progress exists for this fact
+        const existing = db.prepare(`
+            SELECT * FROM user_fact_progress
+            WHERE user_id = ? AND fact_type = ? AND fact_id = ?
+        `).get(userId, factType, factId);
+
+        if (existing) {
+            // Update existing progress using SM-2 algorithm
+            const isCorrect = answer.isCorrect;
+            let { ease_factor, interval_days, times_seen, times_correct, times_wrong } = existing;
+
+            times_seen += 1;
+            if (isCorrect) {
+                times_correct += 1;
+                // SM-2: Increase interval for correct answers
+                // New interval = old interval * ease factor
+                interval_days = Math.min(Math.round(interval_days * ease_factor), 365);
+                // Slightly increase ease factor (max 2.5)
+                ease_factor = Math.min(ease_factor + 0.1, 2.5);
+            } else {
+                times_wrong += 1;
+                // SM-2: Reset interval to 1 day for wrong answers
+                interval_days = 1;
+                // Decrease ease factor (min 1.3)
+                ease_factor = Math.max(ease_factor - 0.2, 1.3);
+            }
+
+            // Calculate next review date
+            const nextReview = new Date();
+            nextReview.setDate(nextReview.getDate() + interval_days);
+
+            // Calculate mastery level (0-5 based on success rate)
+            const successRate = times_correct / times_seen;
+            const masteryLevel = Math.min(Math.floor(successRate * 6), 5);
+
+            db.prepare(`
+                UPDATE user_fact_progress
+                SET times_seen = ?, times_correct = ?, times_wrong = ?,
+                    last_seen_at = ?, next_review_at = ?,
+                    ease_factor = ?, interval_days = ?, mastery_level = ?
+                WHERE id = ?
+            `).run(
+                times_seen, times_correct, times_wrong,
+                now, nextReview.toISOString(),
+                ease_factor, interval_days, masteryLevel,
+                existing.id
+            );
+        } else {
+            // Create new progress record
+            const isCorrect = answer.isCorrect;
+            const initialEase = 2.5;
+            const initialInterval = isCorrect ? 1 : 1; // Start at 1 day regardless
+            const nextReview = new Date();
+            nextReview.setDate(nextReview.getDate() + initialInterval);
+
+            db.prepare(`
+                INSERT INTO user_fact_progress
+                (user_id, fact_type, fact_id, times_seen, times_correct, times_wrong,
+                 last_seen_at, next_review_at, ease_factor, interval_days, mastery_level)
+                VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, 0)
+            `).run(
+                userId, factType, factId,
+                isCorrect ? 1 : 0,
+                isCorrect ? 0 : 1,
+                now, nextReview.toISOString(),
+                initialEase, initialInterval
+            );
         }
     }
 }
