@@ -82,9 +82,9 @@ router.post('/request', authenticate, (req, res, next) => {
 
         const db = getDb();
 
-        // Find user by username
+        // Find user by username (case-insensitive)
         const friendUser = db.prepare(
-            'SELECT id FROM users WHERE username = ?'
+            'SELECT id FROM users WHERE LOWER(username) = LOWER(?)'
         ).get(username);
 
         if (!friendUser) {
