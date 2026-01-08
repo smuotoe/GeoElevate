@@ -1136,13 +1136,21 @@ function updateAchievementProgress(db, userId, gameType, correctCount, totalQues
  * @param {number} totalQuestions - Total questions
  */
 function updateDailyChallengeProgress(db, userId, gameType, correctCount, totalQuestions) {
-    const today = new Date().toISOString().split('T')[0];
+    // Get today's date in multiple formats to handle timezone differences
+    // This handles the case where the client created challenges in their timezone
+    // but the server is running in a different timezone
+    const now = new Date();
+    const utcDate = now.toISOString().split('T')[0];
 
-    // Get today's challenges for this user
+    // Also try yesterday and tomorrow to handle edge cases around midnight
+    const yesterday = new Date(now.getTime() - 86400000).toISOString().split('T')[0];
+    const tomorrow = new Date(now.getTime() + 86400000).toISOString().split('T')[0];
+
+    // Get all recent incomplete challenges for this user (within 1 day range)
     const challenges = db.prepare(`
         SELECT * FROM daily_challenges
-        WHERE user_id = ? AND date = ? AND is_completed = 0
-    `).all(userId, today);
+        WHERE user_id = ? AND date IN (?, ?, ?) AND is_completed = 0
+    `).all(userId, utcDate, yesterday, tomorrow);
 
     console.log('Found', challenges.length, 'incomplete challenges for user', userId);
 
