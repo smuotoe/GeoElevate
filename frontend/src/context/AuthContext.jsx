@@ -126,6 +126,15 @@ export function AuthProvider({ children }) {
         dispatch({ type: 'LOGOUT' })
     }
 
+    /**
+     * Update the current user in state.
+     *
+     * @param {object} userData - Updated user data
+     */
+    function updateUser(userData) {
+        dispatch({ type: 'SET_USER', payload: userData })
+    }
+
     const value = {
         user: state.user,
         loading: state.loading,
@@ -134,6 +143,7 @@ export function AuthProvider({ children }) {
         register,
         logout,
         checkAuth,
+        updateUser,
     }
 
     return (

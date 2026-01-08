@@ -14,6 +14,8 @@ function Today() {
     const [loadingChallenges, setLoadingChallenges] = useState(false)
     const [recentGames, setRecentGames] = useState([])
     const [loadingGames, setLoadingGames] = useState(false)
+    const [recommendations, setRecommendations] = useState([])
+    const [loadingRecommendations, setLoadingRecommendations] = useState(false)
 
     useEffect(() => {
         let ignore = false
@@ -77,6 +79,54 @@ function Today() {
             ignore = true
         }
     }, [user])
+
+    useEffect(() => {
+        let ignore = false
+
+        async function fetchRecommendations() {
+            setLoadingRecommendations(true)
+            try {
+                const data = await api.get('/games/recommendations')
+                if (!ignore) {
+                    setRecommendations(data.recommendations || [])
+                }
+            } catch (err) {
+                if (!ignore) {
+                    console.error('Failed to fetch recommendations:', err)
+                    setRecommendations([])
+                }
+            } finally {
+                if (!ignore) {
+                    setLoadingRecommendations(false)
+                }
+            }
+        }
+
+        if (user) {
+            fetchRecommendations()
+        }
+
+        return () => {
+            ignore = true
+        }
+    }, [user])
+
+    /**
+     * Get icon for game type.
+     *
+     * @param {string} gameType - Game type
+     * @returns {string} Icon emoji
+     */
+    function getGameIcon(gameType) {
+        const icons = {
+            flags: '\uD83C\uDFF4',
+            capitals: '\uD83C\uDFDB',
+            maps: '\uD83C\uDF0E',
+            languages: '\uD83D\uDCAC',
+            trivia: '\uD83D\uDCA1'
+        }
+        return icons[gameType] || '\uD83C\uDFAE'
+    }
 
     /**
      * Get display name for challenge type.
@@ -238,9 +288,43 @@ function Today() {
 
                     <section className="mb-md">
                         <h3 className="mb-sm">Recommended for You</h3>
-                        <div className="card">
-                            <p className="text-secondary">Game recommendations based on your progress.</p>
-                        </div>
+                        {loadingRecommendations ? (
+                            <div className="card">
+                                <p className="text-secondary">Loading recommendations...</p>
+                            </div>
+                        ) : recommendations.length > 0 ? (
+                            <div className="recommendations-list">
+                                {recommendations.map((rec, index) => (
+                                    <Link
+                                        key={`${rec.gameType}-${index}`}
+                                        to={`/play/${rec.gameType}`}
+                                        className="card recommendation-card"
+                                        style={{
+                                            marginBottom: '8px',
+                                            padding: '12px 16px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '12px',
+                                            textDecoration: 'none',
+                                            color: 'inherit'
+                                        }}
+                                    >
+                                        <span style={{ fontSize: '24px' }}>{getGameIcon(rec.gameType)}</span>
+                                        <div style={{ flex: 1 }}>
+                                            <div style={{ fontWeight: 600 }}>{rec.name}</div>
+                                            <div className="text-secondary" style={{ fontSize: '0.85rem' }}>
+                                                {rec.reason}
+                                            </div>
+                                        </div>
+                                        <span style={{ color: 'var(--primary)', fontSize: '1.2rem' }}>&#8250;</span>
+                                    </Link>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="card">
+                                <p className="text-secondary">Play some games to get personalized recommendations!</p>
+                            </div>
+                        )}
                     </section>
 
                     <section className="mb-md">

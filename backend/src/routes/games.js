@@ -36,6 +36,110 @@ function getDailyXpStatus(db, userId, gameType) {
 }
 
 /**
+ * Get recommended games based on user's skill gaps.
+ * GET /api/games/recommendations
+ */
+router.get('/recommendations', authenticate, (req, res, next) => {
+    try {
+        const db = getDb();
+        const limit = Math.min(parseInt(req.query.limit) || 3, 5);
+
+        // Get user's category stats to find skill gaps
+        const categoryStats = db.prepare(`
+            SELECT category, xp, level, games_played, total_correct, total_questions,
+                   high_score, average_time_ms
+            FROM user_category_stats
+            WHERE user_id = ?
+        `).all(req.userId);
+
+        // Calculate accuracy for each category
+        const categoryData = categoryStats.map(stat => ({
+            category: stat.category,
+            gamesPlayed: stat.games_played,
+            accuracy: stat.total_questions > 0
+                ? (stat.total_correct / stat.total_questions) * 100
+                : null,
+            level: stat.level,
+            xp: stat.xp
+        }));
+
+        // Sort by skill gaps:
+        // 1. Categories with lowest accuracy (need improvement)
+        // 2. Categories with fewest games played (unexplored)
+        // 3. Categories never played get priority
+        const recommendations = [];
+
+        // Find categories that need improvement (low accuracy)
+        const playedCategories = categoryData
+            .filter(c => c.gamesPlayed > 0 && c.accuracy !== null)
+            .sort((a, b) => a.accuracy - b.accuracy);
+
+        // Find unexplored categories (never played)
+        const unplayedCategories = categoryData
+            .filter(c => c.gamesPlayed === 0);
+
+        // Game type info for recommendations
+        const gameTypeInfo = {
+            flags: { name: 'Flags', description: 'Practice flag recognition', icon: 'flag' },
+            capitals: { name: 'Capitals', description: 'Learn world capitals', icon: 'building' },
+            maps: { name: 'Maps', description: 'Identify countries on the map', icon: 'map' },
+            languages: { name: 'Languages', description: 'Match languages to countries', icon: 'languages' },
+            trivia: { name: 'Trivia', description: 'Test your geography knowledge', icon: 'lightbulb' }
+        };
+
+        // Add unplayed categories first (encourage exploration)
+        for (const cat of unplayedCategories) {
+            if (recommendations.length >= limit) break;
+            const info = gameTypeInfo[cat.category];
+            if (info) {
+                recommendations.push({
+                    gameType: cat.category,
+                    name: info.name,
+                    description: info.description,
+                    icon: info.icon,
+                    reason: 'Try something new!',
+                    priority: 'explore'
+                });
+            }
+        }
+
+        // Add low-accuracy categories (encourage improvement)
+        for (const cat of playedCategories) {
+            if (recommendations.length >= limit) break;
+            const info = gameTypeInfo[cat.category];
+            if (info) {
+                const reason = cat.accuracy < 50
+                    ? `Improve your ${Math.round(cat.accuracy)}% accuracy`
+                    : cat.accuracy < 70
+                    ? `Level up from ${Math.round(cat.accuracy)}%`
+                    : `Keep practicing - ${Math.round(cat.accuracy)}% accuracy`;
+
+                recommendations.push({
+                    gameType: cat.category,
+                    name: info.name,
+                    description: info.description,
+                    icon: info.icon,
+                    reason,
+                    accuracy: Math.round(cat.accuracy),
+                    gamesPlayed: cat.gamesPlayed,
+                    priority: cat.accuracy < 50 ? 'improve' : 'practice'
+                });
+            }
+        }
+
+        res.json({
+            recommendations,
+            totalCategories: categoryData.length,
+            message: recommendations.length > 0
+                ? 'Games recommended based on your progress'
+                : 'Play some games to get personalized recommendations'
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/**
  * Get available game types.
  * GET /api/games/types
  */
