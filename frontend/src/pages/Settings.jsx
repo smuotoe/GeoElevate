@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
+import { useAudio } from '../context/AudioContext'
 import { api } from '../utils/api'
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges'
 import UnsavedChangesDialog from '../components/UnsavedChangesDialog'
@@ -13,8 +14,9 @@ import UnsavedChangesDialog from '../components/UnsavedChangesDialog'
  */
 function Settings() {
     const navigate = useNavigate()
-    const { logout } = useAuth()
+    const { logout, user, updateUser } = useAuth()
     const { theme, toggleTheme } = useTheme()
+    const { soundEnabled, musicEnabled, musicPlaying, toggleSound, toggleMusic, playSound, startMusic, stopMusic } = useAudio()
     const [showPasswordForm, setShowPasswordForm] = useState(false)
     const [currentPassword, setCurrentPassword] = useState('')
     const [newPassword, setNewPassword] = useState('')
@@ -28,6 +30,16 @@ function Settings() {
     const [deleteLoading, setDeleteLoading] = useState(false)
     const [exportLoading, setExportLoading] = useState(false)
     const [exportError, setExportError] = useState('')
+
+    // Notification preferences
+    const [notificationPrefs, setNotificationPrefs] = useState({
+        streakReminders: true,
+        challengeInvites: true,
+        friendRequests: true,
+        achievements: true,
+        dailyChallenges: true
+    })
+    const [notificationSaving, setNotificationSaving] = useState(false)
 
     // Track unsaved changes in the password form
     const hasUnsavedChanges = showPasswordForm && (currentPassword || newPassword || confirmPassword)
@@ -45,6 +57,47 @@ function Settings() {
             return () => clearTimeout(timer)
         }
     }, [passwordSuccess])
+
+    // Load notification preferences from user settings
+    useEffect(() => {
+        if (user?.settings?.notifications) {
+            setNotificationPrefs(prev => ({
+                ...prev,
+                ...user.settings.notifications
+            }))
+        }
+    }, [user])
+
+    /**
+     * Toggle a notification preference.
+     *
+     * @param {string} key - The preference key to toggle
+     */
+    async function toggleNotificationPref(key) {
+        const newValue = !notificationPrefs[key]
+        const newPrefs = { ...notificationPrefs, [key]: newValue }
+        setNotificationPrefs(newPrefs)
+        setNotificationSaving(true)
+
+        try {
+            await api.patch('/settings', { notifications: newPrefs })
+            if (updateUser && user) {
+                updateUser({
+                    ...user,
+                    settings: {
+                        ...user.settings,
+                        notifications: newPrefs
+                    }
+                })
+            }
+        } catch (err) {
+            // Revert on error
+            setNotificationPrefs(prev => ({ ...prev, [key]: !newValue }))
+            console.error('Failed to save notification preference:', err)
+        } finally {
+            setNotificationSaving(false)
+        }
+    }
 
 
     /**
@@ -204,12 +257,40 @@ function Settings() {
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                     <span>Sound Effects</span>
-                    <button className="btn btn-secondary">On</button>
+                    <button
+                        className={`btn ${soundEnabled ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => {
+                            toggleSound()
+                            // Play a test sound when enabling
+                            if (!soundEnabled) {
+                                setTimeout(() => playSound('click'), 50)
+                            }
+                        }}
+                        style={{ minWidth: '60px' }}
+                    >
+                        {soundEnabled ? 'On' : 'Off'}
+                    </button>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                     <span>Music</span>
-                    <button className="btn btn-secondary">On</button>
+                    <button
+                        className={`btn ${musicEnabled ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => {
+                            toggleMusic()
+                            // Start or stop music based on new state
+                            if (!musicEnabled) {
+                                // Will be enabled - start music
+                                setTimeout(() => startMusic(), 50)
+                            } else {
+                                // Will be disabled - stop music
+                                stopMusic()
+                            }
+                        }}
+                        style={{ minWidth: '60px' }}
+                    >
+                        {musicEnabled ? 'On' : 'Off'}
+                    </button>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -222,7 +303,82 @@ function Settings() {
 
             <section className="card mb-md">
                 <h3 className="mb-md">Notifications</h3>
-                <p className="text-secondary">Configure which notifications you receive.</p>
+                <p className="text-secondary mb-md">Configure which notifications you receive.</p>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <div>
+                        <span>Streak Reminders</span>
+                        <p className="text-secondary" style={{ fontSize: '0.8rem', margin: 0 }}>Daily reminders to maintain your streak</p>
+                    </div>
+                    <button
+                        className={`btn ${notificationPrefs.streakReminders ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => toggleNotificationPref('streakReminders')}
+                        disabled={notificationSaving}
+                        style={{ minWidth: '60px' }}
+                    >
+                        {notificationPrefs.streakReminders ? 'On' : 'Off'}
+                    </button>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <div>
+                        <span>Challenge Invites</span>
+                        <p className="text-secondary" style={{ fontSize: '0.8rem', margin: 0 }}>When someone challenges you to a game</p>
+                    </div>
+                    <button
+                        className={`btn ${notificationPrefs.challengeInvites ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => toggleNotificationPref('challengeInvites')}
+                        disabled={notificationSaving}
+                        style={{ minWidth: '60px' }}
+                    >
+                        {notificationPrefs.challengeInvites ? 'On' : 'Off'}
+                    </button>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <div>
+                        <span>Friend Requests</span>
+                        <p className="text-secondary" style={{ fontSize: '0.8rem', margin: 0 }}>When someone sends you a friend request</p>
+                    </div>
+                    <button
+                        className={`btn ${notificationPrefs.friendRequests ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => toggleNotificationPref('friendRequests')}
+                        disabled={notificationSaving}
+                        style={{ minWidth: '60px' }}
+                    >
+                        {notificationPrefs.friendRequests ? 'On' : 'Off'}
+                    </button>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <div>
+                        <span>Achievements</span>
+                        <p className="text-secondary" style={{ fontSize: '0.8rem', margin: 0 }}>When you unlock an achievement</p>
+                    </div>
+                    <button
+                        className={`btn ${notificationPrefs.achievements ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => toggleNotificationPref('achievements')}
+                        disabled={notificationSaving}
+                        style={{ minWidth: '60px' }}
+                    >
+                        {notificationPrefs.achievements ? 'On' : 'Off'}
+                    </button>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                        <span>Daily Challenges</span>
+                        <p className="text-secondary" style={{ fontSize: '0.8rem', margin: 0 }}>Reminders about daily challenges</p>
+                    </div>
+                    <button
+                        className={`btn ${notificationPrefs.dailyChallenges ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => toggleNotificationPref('dailyChallenges')}
+                        disabled={notificationSaving}
+                        style={{ minWidth: '60px' }}
+                    >
+                        {notificationPrefs.dailyChallenges ? 'On' : 'Off'}
+                    </button>
+                </div>
             </section>
 
             <section className="card mb-md">

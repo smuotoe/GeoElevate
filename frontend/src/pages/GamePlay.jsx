@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useAudio } from '../context/AudioContext'
 import api from '../utils/api'
 import Breadcrumb from '../components/Breadcrumb'
 import Modal from '../components/Modal'
@@ -108,6 +109,7 @@ function GamePlay() {
     const { gameType } = useParams()
     const navigate = useNavigate()
     const { user, checkAuth } = useAuth()
+    const { playSound } = useAudio()
     const formattedGameType = formatGameType(gameType)
     const isOnline = useOnlineStatus()
 
@@ -307,6 +309,13 @@ function GamePlay() {
         setSelectedAnswer(answer)
         setShowResult(true)
 
+        // Play sound effect based on answer correctness
+        if (isCorrect) {
+            playSound('correct')
+        } else {
+            playSound('incorrect')
+        }
+
         let newScore = score
         if (isCorrect) {
             const basePoints = 100
@@ -347,6 +356,13 @@ function GamePlay() {
 
         setSelectedAnswer(typedAnswer)
         setShowResult(true)
+
+        // Play sound effect based on answer correctness
+        if (isCorrect) {
+            playSound('correct')
+        } else {
+            playSound('incorrect')
+        }
 
         let newScore = score
         if (isCorrect) {
