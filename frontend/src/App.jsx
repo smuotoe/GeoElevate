@@ -17,6 +17,8 @@ import Settings from "./pages/Settings"
 import Achievements from "./pages/Achievements"
 import Help from "./pages/Help"
 import Multiplayer from "./pages/Multiplayer"
+import MultiplayerGame from "./pages/MultiplayerGame"
+import MatchDetails from "./pages/MatchDetails"
 import SkillAssessment from "./pages/SkillAssessment"
 import Tutorial from "./pages/Tutorial"
 import NotFound from "./pages/NotFound"
@@ -71,6 +73,16 @@ function App() {
                     <Route path="/multiplayer/lobby/:matchId" element={
                         <ProtectedRoute>
                             <Multiplayer />
+                        </ProtectedRoute>
+                    } />
+                    <Route path="/multiplayer/game/:gameType" element={
+                        <ProtectedRoute>
+                            <MultiplayerGame />
+                        </ProtectedRoute>
+                    } />
+                    <Route path="/multiplayer/match/:matchId" element={
+                        <ProtectedRoute>
+                            <MatchDetails />
                         </ProtectedRoute>
                     } />
 

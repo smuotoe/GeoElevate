@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../utils/api'
 
@@ -10,12 +10,14 @@ import api from '../utils/api'
  */
 function Today() {
     const { user } = useAuth()
+    const navigate = useNavigate()
     const [challenges, setChallenges] = useState([])
     const [loadingChallenges, setLoadingChallenges] = useState(false)
     const [recentGames, setRecentGames] = useState([])
     const [loadingGames, setLoadingGames] = useState(false)
     const [recommendations, setRecommendations] = useState([])
     const [loadingRecommendations, setLoadingRecommendations] = useState(false)
+    const [invites, setInvites] = useState([])
 
     useEffect(() => {
         let ignore = false
@@ -110,6 +112,62 @@ function Today() {
             ignore = true
         }
     }, [user])
+
+    useEffect(() => {
+        let ignore = false
+
+        async function fetchInvites() {
+            try {
+                const data = await api.get('/multiplayer/invites')
+                if (!ignore) {
+                    setInvites(data.invites || [])
+                }
+            } catch (err) {
+                if (!ignore) {
+                    console.error('Failed to fetch invites:', err)
+                    setInvites([])
+                }
+            }
+        }
+
+        if (user) {
+            fetchInvites()
+        }
+
+        return () => {
+            ignore = true
+        }
+    }, [user])
+
+    /**
+     * Handle accepting a multiplayer invite.
+     *
+     * @param {number} inviteId - Invite ID
+     * @param {number} matchId - Match ID to navigate to
+     */
+    async function handleAccept(inviteId, matchId) {
+        try {
+            await api.post(`/multiplayer/invites/${inviteId}/accept`)
+            navigate(`/multiplayer/lobby/${matchId}`)
+        } catch (err) {
+            console.error('Failed to accept invite:', err)
+        }
+    }
+
+    /**
+     * Handle declining a multiplayer invite.
+     *
+     * @param {number} inviteId - Invite ID
+     */
+    async function handleDecline(inviteId) {
+        try {
+            await api.post(`/multiplayer/invites/${inviteId}/decline`)
+            const data = await api.get('/multiplayer/invites')
+            setInvites(data.invites || [])
+        } catch (err) {
+            console.error('Failed to decline invite:', err)
+        }
+    }
 
     /**
      * Get icon for game type.
@@ -285,6 +343,48 @@ function Today() {
                             </div>
                         )}
                     </section>
+
+                    {invites.length > 0 && (
+                        <section className="mb-md">
+                            <h3 className="mb-sm">Multiplayer Invites</h3>
+                            <div className="invites-list">
+                                {invites.map(invite => (
+                                    <div
+                                        key={invite.id}
+                                        className="card"
+                                        style={{ marginBottom: '8px', padding: '12px 16px' }}
+                                    >
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div>
+                                                <span style={{ fontWeight: 600 }}>
+                                                    {invite.challenger_name}
+                                                </span>
+                                                <span className="text-secondary" style={{ marginLeft: '8px', fontSize: '0.85rem', textTransform: 'capitalize' }}>
+                                                    {invite.game_type}
+                                                </span>
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                                <button
+                                                    className="btn btn-primary"
+                                                    style={{ padding: '6px 12px', fontSize: '0.85rem' }}
+                                                    onClick={() => handleAccept(invite.id, invite.match_id)}
+                                                >
+                                                    Accept
+                                                </button>
+                                                <button
+                                                    className="btn btn-secondary"
+                                                    style={{ padding: '6px 12px', fontSize: '0.85rem' }}
+                                                    onClick={() => handleDecline(invite.id)}
+                                                >
+                                                    Decline
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+                    )}
 
                     <section className="mb-md">
                         <h3 className="mb-sm">Recommended for You</h3>
