@@ -132,7 +132,7 @@ function GamePlay() {
     const [selectedRegion, setSelectedRegion] = useState('')
     const [difficulty, setDifficulty] = useState('medium')
     const questionTime = DIFFICULTY_TIME[difficulty] || 15
-    const [gameStats, setGameStats] = useState({ xpEarned: 0, avgTimeMs: 0 })
+    const [gameStats, setGameStats] = useState({ xpEarned: 0, avgTimeMs: 0, xpCapInfo: null })
     const [showReview, setShowReview] = useState(false)
     const [showShareDialog, setShowShareDialog] = useState(false)
     const [shareMessage, setShareMessage] = useState('')
@@ -400,13 +400,21 @@ function GamePlay() {
                 setGameStats({ xpEarned, avgTimeMs })
 
                 try {
-                    await api.patch(`/games/sessions/${sessionId}`, {
+                    const response = await api.patch(`/games/sessions/${sessionId}`, {
                         score: scoreToUse,
                         xpEarned,
                         correctCount,
                         averageTimeMs: avgTimeMs,
                         answers: answersToUse
                     })
+                    // Use actual XP earned from server (may be capped)
+                    if (response.xpEarned !== undefined) {
+                        setGameStats(prev => ({
+                            ...prev,
+                            xpEarned: response.xpEarned,
+                            xpCapInfo: response.xpCapInfo || null
+                        }))
+                    }
                     // Refresh user data to update streak and XP in context
                     await checkAuth()
                 } catch (saveErr) {
@@ -800,6 +808,11 @@ function GamePlay() {
                     <div className={styles.statsGrid}>
                         <div className={styles.stat}>
                             <span className={styles.statValue}>+{gameStats.xpEarned}</span>
+                            {gameStats.xpCapInfo && (
+                                <span className={styles.xpCapWarning}>
+                                    {gameStats.xpCapInfo.message}
+                                </span>
+                            )}
                             <span className={styles.statLabel}>XP Earned</span>
                         </div>
                         <div className={styles.stat}>

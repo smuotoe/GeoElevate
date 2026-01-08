@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getDb } from '../models/database.js';
 import { authenticate, optionalAuthenticate } from '../middleware/auth.js';
+import { gameAnswerRateLimit } from '../middleware/rateLimit.js';
 
 const router = Router();
 
@@ -240,7 +241,7 @@ router.post('/sessions', authenticate, (req, res) => {
  * Uses a database transaction to ensure all-or-nothing data integrity.
  * If the user refreshes during save, either all data is saved or none.
  */
-router.patch('/sessions/:id', authenticate, (req, res, next) => {
+router.patch('/sessions/:id', authenticate, gameAnswerRateLimit, (req, res, next) => {
     const db = getDb();
 
     try {

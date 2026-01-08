@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
@@ -26,6 +26,8 @@ function Settings() {
     const [deletePassword, setDeletePassword] = useState('')
     const [deleteError, setDeleteError] = useState('')
     const [deleteLoading, setDeleteLoading] = useState(false)
+    const [exportLoading, setExportLoading] = useState(false)
+    const [exportError, setExportError] = useState('')
 
     // Track unsaved changes in the password form
     const hasUnsavedChanges = showPasswordForm && (currentPassword || newPassword || confirmPassword)
@@ -110,6 +112,45 @@ function Settings() {
             setLoading(false)
         }
     }
+
+    /**
+     * Handle data export.
+     * Downloads a JSON file with all user data.
+     */
+    const handleExportData = useCallback(async () => {
+        setExportError('')
+        setExportLoading(true)
+
+        try {
+            const { user } = await api.get('/auth/me')
+            const token = localStorage.getItem('accessToken')
+            const response = await fetch(`/api/users/${user.id}/export`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+
+            if (!response.ok) {
+                const data = await response.json()
+                throw new Error(data.error?.message || 'Export failed')
+            }
+
+            const data = await response.json()
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `geoelevate-export-${user.username}-${Date.now()}.json`
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+            URL.revokeObjectURL(url)
+        } catch (error) {
+            setExportError(error.message)
+        } finally {
+            setExportLoading(false)
+        }
+    }, [])
 
     /**
      * Handle account deletion.
@@ -239,7 +280,7 @@ function Settings() {
                         </div>
 
                         {passwordError && (
-                            <div className="form-error">{passwordError}</div>
+                            <div className="form-error" role="alert" aria-live="assertive">{passwordError}</div>
                         )}
 
                         <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
@@ -271,13 +312,27 @@ function Settings() {
             <section className="card mb-md">
                 <h3 className="mb-md">Privacy & Data</h3>
                 <p className="text-secondary mb-md">Export your data or delete your account.</p>
-                <button
-                    className="btn"
-                    onClick={() => setShowDeleteDialog(true)}
-                    style={{ background: 'var(--error)', color: 'white' }}
-                >
-                    Delete Account
-                </button>
+
+                {exportError && (
+                    <div className="form-error mb-md" role="alert" aria-live="assertive">{exportError}</div>
+                )}
+
+                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                    <button
+                        className="btn btn-secondary"
+                        onClick={handleExportData}
+                        disabled={exportLoading}
+                    >
+                        {exportLoading ? 'Exporting...' : 'Export Data'}
+                    </button>
+                    <button
+                        className="btn"
+                        onClick={() => setShowDeleteDialog(true)}
+                        style={{ background: 'var(--error)', color: 'white' }}
+                    >
+                        Delete Account
+                    </button>
+                </div>
             </section>
 
             {/* Delete Account Dialog */}
@@ -320,7 +375,7 @@ function Settings() {
                                     />
                                 </div>
                                 {deleteError && (
-                                    <div className="form-error">{deleteError}</div>
+                                    <div className="form-error" role="alert" aria-live="assertive">{deleteError}</div>
                                 )}
                             </div>
                             <div className="modal-footer">

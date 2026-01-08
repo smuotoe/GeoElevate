@@ -216,6 +216,14 @@
     color: var(--text-secondary);
 }
 
+.xpCapWarning {
+    display: block;
+    font-size: 12px;
+    color: var(--warning, #FFE66D);
+    margin-top: 4px;
+    font-weight: 500;
+}
+
 .buttonGroup {
     display: flex;
     gap: 12px;
@@ -357,4 +365,107 @@
         opacity: 1;
         transform: translateX(-50%) translateY(0);
     }
+}
+
+.reviewSection {
+    margin-top: 20px;
+    background: var(--color-surface);
+    border-radius: 12px;
+    padding: 20px;
+}
+
+.reviewTitle {
+    color: var(--color-text-primary);
+    margin-bottom: 16px;
+    font-size: 18px;
+}
+
+.reviewList {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.reviewItem {
+    background: var(--color-background);
+    border-radius: 8px;
+    padding: 16px;
+    border-left: 4px solid var(--color-error);
+}
+
+.reviewQuestion {
+    font-weight: 500;
+    color: var(--color-text-primary);
+    margin-bottom: 12px;
+}
+
+.reviewNumber {
+    color: var(--color-text-secondary);
+    margin-right: 8px;
+}
+
+.reviewAnswers {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 14px;
+}
+
+.yourAnswer, .correctAnswerRow {
+    display: flex;
+    gap: 8px;
+}
+
+.answerLabel {
+    color: var(--color-text-secondary);
+    min-width: 110px;
+}
+
+.wrongAnswer {
+    color: var(--color-error);
+}
+
+.correctAnswer {
+    color: var(--color-success);
+    font-weight: 500;
+}
+
+.reviewImage {
+    max-width: 120px;
+    max-height: 80px;
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+    margin-left: 8px;
+    vertical-align: middle;
+}
+
+.reviewAnswerImage {
+    max-width: 60px;
+    max-height: 40px;
+    border-radius: 3px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    vertical-align: middle;
+}
+
+.shareContent {
+    text-align: center;
+    padding: 8px;
+}
+
+.shareMessage {
+    background: var(--color-background);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--color-text-primary);
+    text-align: left;
+    word-break: break-word;
+}
+
+.shareButtons {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
 }

@@ -1,0 +1,91 @@
+{
+  "exportedAt": "2026-01-07T19:04:13.463Z",
+  "filters": {
+    "type": "all",
+    "unreadOnly": false,
+    "sortOrder": "desc"
+  },
+  "totalCount": 10,
+  "notifications": [
+    {
+      "id": 20,
+      "type": "friend_accepted",
+      "title": "Friend Request Accepted",
+      "body": "Your friend request was accepted",
+      "isRead": false,
+      "createdAt": "2026-01-07 17:45:54"
+    },
+    {
+      "id": 18,
+      "type": "friend_accepted",
+      "title": "Friend Request Accepted",
+      "body": "Your friend request was accepted",
+      "isRead": false,
+      "createdAt": "2026-01-07 17:43:15"
+    },
+    {
+      "id": 13,
+      "type": "challenge_complete",
+      "title": "Challenge Complete!",
+      "body": "You earned 75 XP for completing \"correct_answers\"!",
+      "isRead": true,
+      "createdAt": "2026-01-07 10:14:12"
+    },
+    {
+      "id": 14,
+      "type": "challenge_complete",
+      "title": "Challenge Complete!",
+      "body": "You earned 100 XP for completing \"perfect_game\"!",
+      "isRead": true,
+      "createdAt": "2026-01-07 10:14:12"
+    },
+    {
+      "id": 12,
+      "type": "challenge_complete",
+      "title": "Challenge Complete!",
+      "body": "You earned 50 XP for completing \"play_games\"!",
+      "isRead": false,
+      "createdAt": "2026-01-07 09:24:14"
+    },
+    {
+      "id": 11,
+      "type": "friend_accepted",
+      "title": "Friend Request Accepted",
+      "body": "Your friend request was accepted",
+      "isRead": false,
+      "createdAt": "2026-01-07 08:26:29"
+    },
+    {
+      "id": 9,
+      "type": "friend_accepted",
+      "title": "Friend Request Accepted",
+      "body": "Your friend request was accepted",
+      "isRead": false,
+      "createdAt": "2026-01-07 05:52:25"
+    },
+    {
+      "id": 6,
+      "type": "friend_accepted",
+      "title": "Friend Request Accepted",
+      "body": "Your friend request was accepted",
+      "isRead": false,
+      "createdAt": "2026-01-07 05:45:37"
+    },
+    {
+      "id": 4,
+      "type": "friend_accepted",
+      "title": "Friend Request Accepted",
+      "body": "Your friend request was accepted",
+      "isRead": false,
+      "createdAt": "2026-01-07 05:37:54"
+    },
+    {
+      "id": 2,
+      "type": "friend_accepted",
+      "title": "Friend Request Accepted",
+      "body": "Your friend request was accepted",
+      "isRead": false,
+      "createdAt": "2026-01-07 05:30:52"
+    }
+  ]
+}

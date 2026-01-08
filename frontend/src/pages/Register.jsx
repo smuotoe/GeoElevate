@@ -83,7 +83,8 @@ function Register() {
         const result = await register(trimmedEmail, trimmedUsername, password)
 
         if (result.success) {
-            navigate('/', { replace: true })
+            // Redirect to skill assessment for new users
+            navigate('/assessment', { replace: true })
         } else {
             setError(result.error || 'Registration failed')
             isSubmittingRef.current = false
@@ -153,7 +154,7 @@ function Register() {
                         />
                     </div>
 
-                    {error && <p className="form-error">{error}</p>}
+                    {error && <p className="form-error" role="alert" aria-live="assertive">{error}</p>}
 
                     <div className="form-actions">
                         <button

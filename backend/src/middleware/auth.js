@@ -1,5 +1,8 @@
 import jwt from 'jsonwebtoken';
 
+// Default JWT secret for development
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-geo-elevate-2024';
+
 /**
  * Authentication middleware.
  * Verifies JWT token from Authorization header.
@@ -20,7 +23,7 @@ export function authenticate(req, res, next) {
     const token = authHeader.split(' ')[1];
 
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const decoded = jwt.verify(token, JWT_SECRET);
         req.userId = decoded.userId;
         next();
     } catch (err) {
@@ -54,7 +57,7 @@ export function optionalAuthenticate(req, res, next) {
     const token = authHeader.split(' ')[1];
 
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const decoded = jwt.verify(token, JWT_SECRET);
         req.userId = decoded.userId;
     } catch {
         req.userId = null;

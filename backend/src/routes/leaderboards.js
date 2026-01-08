@@ -3,6 +3,7 @@ import { getDb } from '../models/database.js';
 import { authenticate, optionalAuthenticate } from '../middleware/auth.js';
 
 const router = Router();
+const VALID_GAME_TYPES = ['flags', 'capitals', 'maps', 'languages', 'trivia'];
 
 /**
  * Get global all-time leaderboard.
@@ -22,7 +23,6 @@ router.get('/global', optionalAuthenticate, (req, res, next) => {
             LIMIT ? OFFSET ?
         `).all(parseInt(limit), parseInt(offset));
 
-        // Get current user's rank if authenticated
         let userRank = null;
         if (req.userId) {
             userRank = db.prepare(`
@@ -49,8 +49,7 @@ router.get('/game/:gameType', optionalAuthenticate, (req, res, next) => {
         const { gameType } = req.params;
         const { limit = 50, offset = 0 } = req.query;
 
-        const validTypes = ['flags', 'capitals', 'maps', 'languages', 'trivia'];
-        if (!validTypes.includes(gameType)) {
+        if (!VALID_GAME_TYPES.includes(gameType)) {
             return res.status(400).json({
                 error: { message: 'Invalid game type' }
             });
@@ -68,7 +67,6 @@ router.get('/game/:gameType', optionalAuthenticate, (req, res, next) => {
             LIMIT ? OFFSET ?
         `).all(gameType, parseInt(limit), parseInt(offset));
 
-        // Get current user's rank if authenticated
         let userRank = null;
         if (req.userId) {
             userRank = db.prepare(`
@@ -88,70 +86,111 @@ router.get('/game/:gameType', optionalAuthenticate, (req, res, next) => {
 });
 
 /**
- * Get weekly leaderboard.
+ * Get weekly leaderboard with optional game type filter.
  * GET /api/leaderboards/weekly
  */
 router.get('/weekly', optionalAuthenticate, (req, res, next) => {
     try {
-        const { limit = 50, offset = 0 } = req.query;
+        const { limit = 50, offset = 0, gameType } = req.query;
         const db = getDb();
-
-        // Get XP earned this week
         const startOfWeek = getStartOfWeek();
+        const hasGameTypeFilter = gameType && VALID_GAME_TYPES.includes(gameType);
 
-        const leaderboard = db.prepare(`
-            SELECT u.id, u.username, u.avatar_url,
-                   COALESCE(SUM(gs.xp_earned), 0) as weekly_xp,
-                   ROW_NUMBER() OVER (ORDER BY COALESCE(SUM(gs.xp_earned), 0) DESC) as rank
-            FROM users u
-            LEFT JOIN game_sessions gs ON gs.user_id = u.id
-                AND gs.completed_at >= ?
-            WHERE u.is_guest = 0
-            GROUP BY u.id
-            ORDER BY weekly_xp DESC
-            LIMIT ? OFFSET ?
-        `).all(startOfWeek, parseInt(limit), parseInt(offset));
-
-        // Get current user's rank if authenticated
+        let leaderboard;
         let userRank = null;
-        if (req.userId) {
-            const userStats = db.prepare(`
-                SELECT COALESCE(SUM(xp_earned), 0) as weekly_xp
-                FROM game_sessions
-                WHERE user_id = ? AND completed_at >= ?
-            `).get(req.userId, startOfWeek);
 
-            const betterPlayers = db.prepare(`
-                SELECT COUNT(*) as count
-                FROM (
-                    SELECT u.id, COALESCE(SUM(gs.xp_earned), 0) as weekly_xp
-                    FROM users u
-                    LEFT JOIN game_sessions gs ON gs.user_id = u.id
-                        AND gs.completed_at >= ?
-                    WHERE u.is_guest = 0
-                    GROUP BY u.id
-                )
-                WHERE weekly_xp > ?
-            `).get(startOfWeek, userStats?.weekly_xp || 0);
+        if (hasGameTypeFilter) {
+            leaderboard = db.prepare(`
+                SELECT u.id, u.username, u.avatar_url,
+                       COALESCE(SUM(gs.xp_earned), 0) as weekly_xp,
+                       ROW_NUMBER() OVER (ORDER BY COALESCE(SUM(gs.xp_earned), 0) DESC) as rank
+                FROM users u
+                LEFT JOIN game_sessions gs ON gs.user_id = u.id
+                    AND gs.completed_at >= ?
+                    AND gs.game_type = ?
+                WHERE u.is_guest = 0
+                GROUP BY u.id
+                ORDER BY weekly_xp DESC
+                LIMIT ? OFFSET ?
+            `).all(startOfWeek, gameType, parseInt(limit), parseInt(offset));
 
-            userRank = betterPlayers.count + 1;
+            if (req.userId) {
+                const userStats = db.prepare(`
+                    SELECT COALESCE(SUM(xp_earned), 0) as weekly_xp
+                    FROM game_sessions
+                    WHERE user_id = ? AND completed_at >= ? AND game_type = ?
+                `).get(req.userId, startOfWeek, gameType);
+
+                const betterPlayers = db.prepare(`
+                    SELECT COUNT(*) as count
+                    FROM (
+                        SELECT u.id, COALESCE(SUM(gs.xp_earned), 0) as weekly_xp
+                        FROM users u
+                        LEFT JOIN game_sessions gs ON gs.user_id = u.id
+                            AND gs.completed_at >= ?
+                            AND gs.game_type = ?
+                        WHERE u.is_guest = 0
+                        GROUP BY u.id
+                    )
+                    WHERE weekly_xp > ?
+                `).get(startOfWeek, gameType, userStats?.weekly_xp || 0);
+
+                userRank = betterPlayers.count + 1;
+            }
+        } else {
+            leaderboard = db.prepare(`
+                SELECT u.id, u.username, u.avatar_url,
+                       COALESCE(SUM(gs.xp_earned), 0) as weekly_xp,
+                       ROW_NUMBER() OVER (ORDER BY COALESCE(SUM(gs.xp_earned), 0) DESC) as rank
+                FROM users u
+                LEFT JOIN game_sessions gs ON gs.user_id = u.id
+                    AND gs.completed_at >= ?
+                WHERE u.is_guest = 0
+                GROUP BY u.id
+                ORDER BY weekly_xp DESC
+                LIMIT ? OFFSET ?
+            `).all(startOfWeek, parseInt(limit), parseInt(offset));
+
+            if (req.userId) {
+                const userStats = db.prepare(`
+                    SELECT COALESCE(SUM(xp_earned), 0) as weekly_xp
+                    FROM game_sessions
+                    WHERE user_id = ? AND completed_at >= ?
+                `).get(req.userId, startOfWeek);
+
+                const betterPlayers = db.prepare(`
+                    SELECT COUNT(*) as count
+                    FROM (
+                        SELECT u.id, COALESCE(SUM(gs.xp_earned), 0) as weekly_xp
+                        FROM users u
+                        LEFT JOIN game_sessions gs ON gs.user_id = u.id
+                            AND gs.completed_at >= ?
+                        WHERE u.is_guest = 0
+                        GROUP BY u.id
+                    )
+                    WHERE weekly_xp > ?
+                `).get(startOfWeek, userStats?.weekly_xp || 0);
+
+                userRank = betterPlayers.count + 1;
+            }
         }
 
-        res.json({ leaderboard, userRank, period: 'weekly' });
+        res.json({ leaderboard, userRank, period: 'weekly', gameType: gameType || null });
     } catch (err) {
         next(err);
     }
 });
 
 /**
- * Get friends-only leaderboard.
+ * Get friends-only leaderboard with optional game type filter.
  * GET /api/leaderboards/friends
  */
 router.get('/friends', authenticate, (req, res, next) => {
     try {
+        const { gameType } = req.query;
         const db = getDb();
+        const hasGameTypeFilter = gameType && VALID_GAME_TYPES.includes(gameType);
 
-        // Get friend IDs
         const friendIds = db.prepare(`
             SELECT CASE
                 WHEN user_id = ? THEN friend_id
@@ -161,11 +200,26 @@ router.get('/friends', authenticate, (req, res, next) => {
             WHERE (user_id = ? OR friend_id = ?) AND status = 'accepted'
         `).all(req.userId, req.userId, req.userId).map(f => f.friend_id);
 
-        // Include current user in the leaderboard
         const userIds = [req.userId, ...friendIds];
 
+        if (hasGameTypeFilter) {
+            const placeholders = userIds.map(() => '?').join(',');
+            const leaderboard = db.prepare(`
+                SELECT u.id, u.username, u.avatar_url,
+                       COALESCE(ucs.xp, 0) as xp,
+                       COALESCE(ucs.level, 1) as level,
+                       ROW_NUMBER() OVER (ORDER BY COALESCE(ucs.xp, 0) DESC) as rank
+                FROM users u
+                LEFT JOIN user_category_stats ucs ON ucs.user_id = u.id AND ucs.category = ?
+                WHERE u.id IN (${placeholders})
+                ORDER BY xp DESC
+            `).all(gameType, ...userIds);
+
+            const userRank = leaderboard.find(u => u.id === req.userId)?.rank;
+            return res.json({ leaderboard, userRank, gameType });
+        }
+
         if (userIds.length === 1) {
-            // Only the user, no friends
             const user = db.prepare(`
                 SELECT id, username, avatar_url, overall_xp, overall_level
                 FROM users WHERE id = ?
@@ -187,7 +241,6 @@ router.get('/friends', authenticate, (req, res, next) => {
         `).all(...userIds);
 
         const userRank = leaderboard.find(u => u.id === req.userId)?.rank;
-
         res.json({ leaderboard, userRank });
     } catch (err) {
         next(err);

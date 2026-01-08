@@ -5,6 +5,29 @@ import { authenticate } from '../middleware/auth.js';
 const router = Router();
 
 /**
+ * Get pending friend requests received by the user.
+ * GET /api/friends/requests
+ */
+router.get('/requests', authenticate, (req, res, next) => {
+    try {
+        const db = getDb();
+
+        const requests = db.prepare(`
+            SELECT f.id, f.user_id, f.created_at,
+                   u.username, u.avatar_url, u.overall_xp, u.overall_level
+            FROM friendships f
+            JOIN users u ON u.id = f.user_id
+            WHERE f.friend_id = ? AND f.status = 'pending'
+            ORDER BY f.created_at DESC
+        `).all(req.userId);
+
+        res.json({ requests });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/**
  * Get user's friends list.
  * GET /api/friends
  */

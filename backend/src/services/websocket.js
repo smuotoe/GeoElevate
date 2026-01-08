@@ -2,16 +2,99 @@ import { WebSocketServer } from 'ws';
 import jwt from 'jsonwebtoken';
 import { getDb } from '../models/database.js';
 
+// Default JWT secret for development
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-geo-elevate-2024';
+
 const matches = new Map(); // matchId -> { players: Map, questions: [], currentQuestion: number }
 const userConnections = new Map(); // userId -> WebSocket
+
+// Rate limiting for answer submissions
+const answerRateLimits = new Map(); // `${userId}-${matchId}` -> { count: number, resetTime: number }
+const RATE_LIMIT_WINDOW_MS = 1000; // 1 second window
+const MAX_ANSWERS_PER_WINDOW = 3; // Max 3 answer submissions per second
+
+/**
+ * Check if user is rate limited for answer submissions.
+ *
+ * @param {number} userId - User ID
+ * @param {number} matchId - Match ID
+ * @returns {{ limited: boolean, message?: string }}
+ */
+function checkAnswerRateLimit(userId, matchId) {
+    const key = `${userId}-${matchId}`;
+    const now = Date.now();
+    const limit = answerRateLimits.get(key);
+
+    if (!limit || now > limit.resetTime) {
+        // Start new window
+        answerRateLimits.set(key, { count: 1, resetTime: now + RATE_LIMIT_WINDOW_MS });
+        return { limited: false };
+    }
+
+    if (limit.count >= MAX_ANSWERS_PER_WINDOW) {
+        return {
+            limited: true,
+            message: 'Rate limit exceeded. Please slow down.'
+        };
+    }
+
+    limit.count++;
+    return { limited: false };
+}
+
+/**
+ * Clean up expired rate limit entries periodically.
+ */
+function cleanupRateLimits() {
+    const now = Date.now();
+    for (const [key, limit] of answerRateLimits) {
+        if (now > limit.resetTime + 60000) { // Clean entries older than 1 minute
+            answerRateLimits.delete(key);
+        }
+    }
+}
+
+// Run cleanup every minute
+setInterval(cleanupRateLimits, 60000);
 
 /**
  * Initialize WebSocket server for multiplayer functionality.
  *
  * @param {number} port - Port to listen on
+ * @param {number} maxRetries - Maximum retries for port binding
  */
-export function initWebSocket(port) {
-    const wss = new WebSocketServer({ port });
+export function initWebSocket(port, maxRetries = 5) {
+    let currentPort = port;
+    let retries = 0;
+
+    function tryCreateServer() {
+        const wss = new WebSocketServer({ port: currentPort });
+
+        wss.on('error', (err) => {
+            if (err.code === 'EADDRINUSE' && retries < maxRetries) {
+                retries++;
+                currentPort++;
+                console.log(`WebSocket port ${currentPort - 1} in use, trying ${currentPort}...`);
+                wss.close();
+                setTimeout(tryCreateServer, 100);
+            } else {
+                console.error('WebSocket server error:', err);
+            }
+        });
+
+        setupWebSocketHandlers(wss, currentPort);
+    }
+
+    tryCreateServer();
+}
+
+/**
+ * Setup WebSocket event handlers.
+ *
+ * @param {WebSocketServer} wss - WebSocket server instance
+ * @param {number} port - Port the server is listening on
+ */
+function setupWebSocketHandlers(wss, port) {
 
     wss.on('connection', (ws, req) => {
         // Authenticate connection
@@ -25,7 +108,7 @@ export function initWebSocket(port) {
 
         let userId;
         try {
-            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const decoded = jwt.verify(token, JWT_SECRET);
             userId = decoded.userId;
         } catch {
             ws.close(4002, 'Invalid token');
@@ -162,6 +245,16 @@ function handleJoinMatch(ws, userId, matchId) {
  * @param {number} timeMs - Time taken in milliseconds
  */
 function handleSubmitAnswer(ws, userId, matchId, questionIndex, answer, timeMs) {
+    // Check rate limit first
+    const rateLimit = checkAnswerRateLimit(userId, matchId);
+    if (rateLimit.limited) {
+        ws.send(JSON.stringify({
+            type: 'error',
+            message: rateLimit.message
+        }));
+        return;
+    }
+
     const matchState = matches.get(matchId);
     if (!matchState) {
         ws.send(JSON.stringify({ type: 'error', message: 'Match not found' }));

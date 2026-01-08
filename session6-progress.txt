@@ -1,0 +1,54 @@
+## Session 6 Progress
+- **Date**: January 7, 2026
+- **Status**: 43/302 features passing (14.2%)
+- **Focus**: Streak tracking bug fix, server port configuration
+
+### Bug Fixes This Session
+
+#### Critical Bug: Streak Not Updating After Game
+- **Root Cause**: Multiple issues:
+  1. Old backend process on port 3001 was being used instead of new code on port 5001
+  2. The `updateUserStats` function's streak logic had edge cases where users who played today would have streak=0
+  3. The condition `user.last_played_date === today && user.current_streak === 0` was present but the old server didn't have it
+- **Fix**:
+  1. Updated `frontend/vite.config.js` to proxy to port 5001 instead of 3001
+  2. Added `/api/games/fix-streak/:id` endpoint to repair users with incorrect streak=0
+  3. Added `/api/games/debug-user/:id` endpoint for debugging user data
+
+#### Feature #54: Streak count tracks actual days - PASS
+- Verified streak updates correctly when user plays a game
+- Confirmed streak stays at 1 when playing multiple games on the same day
+- `last_played_date` correctly set to today's date
+
+### Code Changes This Session
+
+#### Backend
+- `backend/src/routes/games.js`:
+  - Added `debug-user/:id` GET endpoint for checking user streak data
+  - Added `fix-streak/:id` POST endpoint to repair incorrect streak values
+
+#### Frontend
+- `frontend/vite.config.js`:
+  - Changed proxy target from port 3001 to 5001
+
+### Known Issues
+
+#### GamePlay State Bug
+- After answering the 10th question, game sometimes gets stuck showing "Question 10/10" with disabled buttons and a new country
+- Timer shows 15s but doesn't count down
+- Root cause: Race condition in the timer/state logic with React StrictMode causing double renders
+- **Impact**: Game sessions may not complete properly, stats may not fully save
+- **Workaround**: Navigate away from the page; stats from completed questions are still saved
+
+### What the Next Agent Should Do
+
+1. **Fix GamePlay state bug** - The game engine has a race condition that causes it to get stuck at question 10
+2. **Investigate port conflict** - External process holding port 3001, new backend starts on 5001
+3. **Continue with remaining features**
+
+### Technical Notes
+
+- **Test user**: test@example.com / password123 / testuser
+- **Backend running on**: port 5001 (not 3001)
+- **Frontend running on**: port 5174 (or 5173 if previous stopped)
+- **Database**: `backend/data/geoelevate.db` (sql.js format)

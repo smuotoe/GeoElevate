@@ -95,7 +95,7 @@ function Login() {
                         />
                     </div>
 
-                    {error && <p className="form-error">{error}</p>}
+                    {error && <p className="form-error" role="alert" aria-live="assertive">{error}</p>}
 
                     <div className="form-actions">
                         <button

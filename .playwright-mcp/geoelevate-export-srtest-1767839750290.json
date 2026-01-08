@@ -1,0 +1,338 @@
+{
+  "exportedAt": "2026-01-08T02:35:50.287Z",
+  "profile": {
+    "id": 30,
+    "username": "srtest",
+    "avatar_url": "/avatars/default.png",
+    "overall_xp": 334,
+    "overall_level": 1,
+    "current_streak": 1,
+    "longest_streak": 0,
+    "created_at": "2026-01-08 00:20:55",
+    "updated_at": "2026-01-08 01:24:19"
+  },
+  "categoryStats": [
+    {
+      "category": "capitals",
+      "xp": 248,
+      "level": 1,
+      "games_played": 1,
+      "total_correct": 10,
+      "total_questions": 10,
+      "high_score": 2480,
+      "average_time_ms": 0
+    },
+    {
+      "category": "flags",
+      "xp": 86,
+      "level": 1,
+      "games_played": 2,
+      "total_correct": 5,
+      "total_questions": 16,
+      "high_score": 740,
+      "average_time_ms": 0
+    },
+    {
+      "category": "languages",
+      "xp": 0,
+      "level": 1,
+      "games_played": 0,
+      "total_correct": 0,
+      "total_questions": 0,
+      "high_score": 0,
+      "average_time_ms": 0
+    },
+    {
+      "category": "maps",
+      "xp": 0,
+      "level": 1,
+      "games_played": 0,
+      "total_correct": 0,
+      "total_questions": 0,
+      "high_score": 0,
+      "average_time_ms": 0
+    },
+    {
+      "category": "trivia",
+      "xp": 0,
+      "level": 1,
+      "games_played": 0,
+      "total_correct": 0,
+      "total_questions": 0,
+      "high_score": 0,
+      "average_time_ms": 0
+    }
+  ],
+  "achievements": [
+    {
+      "id": 1,
+      "name": "Flag Master",
+      "description": "Identify 100 flags correctly",
+      "icon": "flag",
+      "xp_reward": 500,
+      "progress": 5,
+      "unlocked_at": null
+    },
+    {
+      "id": 4,
+      "name": "Perfect Game",
+      "description": "Score 100% on any game",
+      "icon": "star",
+      "xp_reward": 200,
+      "progress": 1,
+      "unlocked_at": "2026-01-08T01:24:19.861Z"
+    },
+    {
+      "id": 8,
+      "name": "Capital Expert",
+      "description": "Identify 50 capitals correctly",
+      "icon": "building",
+      "xp_reward": 300,
+      "progress": 10,
+      "unlocked_at": null
+    },
+    {
+      "id": 10,
+      "name": "Linguist",
+      "description": "Answer 30 language questions correctly",
+      "icon": "language",
+      "xp_reward": 300,
+      "progress": 0,
+      "unlocked_at": null
+    },
+    {
+      "id": 12,
+      "name": "First Steps",
+      "description": "Complete your first game",
+      "icon": "check",
+      "xp_reward": 50,
+      "progress": 1,
+      "unlocked_at": "2026-01-08T00:23:31.026Z"
+    }
+  ],
+  "gameHistory": [
+    {
+      "id": 169,
+      "game_type": "flags",
+      "game_mode": "solo",
+      "score": 0,
+      "xp_earned": 0,
+      "correct_count": 0,
+      "total_questions": 10,
+      "average_time_ms": 0,
+      "started_at": "2026-01-08 02:23:27",
+      "completed_at": null,
+      "difficulty_level": "medium",
+      "region_filter": null
+    },
+    {
+      "id": 168,
+      "game_type": "trivia",
+      "game_mode": "solo",
+      "score": 0,
+      "xp_earned": 0,
+      "correct_count": 0,
+      "total_questions": 10,
+      "average_time_ms": 0,
+      "started_at": "2026-01-08 02:03:16",
+      "completed_at": null,
+      "difficulty_level": "medium",
+      "region_filter": null
+    },
+    {
+      "id": 167,
+      "game_type": "flags",
+      "game_mode": "solo",
+      "score": 0,
+      "xp_earned": 0,
+      "correct_count": 0,
+      "total_questions": 10,
+      "average_time_ms": 0,
+      "started_at": "2026-01-08 01:29:49",
+      "completed_at": null,
+      "difficulty_level": "medium",
+      "region_filter": null
+    },
+    {
+      "id": 166,
+      "game_type": "capitals",
+      "game_mode": "solo",
+      "score": 2480,
+      "xp_earned": 248,
+      "correct_count": 10,
+      "total_questions": 10,
+      "average_time_ms": 9200,
+      "started_at": "2026-01-08 01:22:28",
+      "completed_at": "2026-01-08 01:24:19",
+      "difficulty_level": "medium",
+      "region_filter": null
+    },
+    {
+      "id": 165,
+      "game_type": "flags",
+      "game_mode": "solo",
+      "score": 0,
+      "xp_earned": 0,
+      "correct_count": 0,
+      "total_questions": 10,
+      "average_time_ms": 0,
+      "started_at": "2026-01-08 01:19:37",
+      "completed_at": null,
+      "difficulty_level": "medium",
+      "region_filter": null
+    },
+    {
+      "id": 164,
+      "game_type": "flags",
+      "game_mode": "solo",
+      "score": 0,
+      "xp_earned": 0,
+      "correct_count": 0,
+      "total_questions": 10,
+      "average_time_ms": 0,
+      "started_at": "2026-01-08 01:15:41",
+      "completed_at": null,
+      "difficulty_level": "medium",
+      "region_filter": null
+    },
+    {
+      "id": 163,
+      "game_type": "flags",
+      "game_mode": "solo",
+      "score": 0,
+      "xp_earned": 0,
+      "correct_count": 0,
+      "total_questions": 10,
+      "average_time_ms": 0,
+      "started_at": "2026-01-08 00:47:15",
+      "completed_at": null,
+      "difficulty_level": "medium",
+      "region_filter": null
+    },
+    {
+      "id": 162,
+      "game_type": "flags",
+      "game_mode": "solo",
+      "score": 0,
+      "xp_earned": 0,
+      "correct_count": 0,
+      "total_questions": 10,
+      "average_time_ms": 0,
+      "started_at": "2026-01-08 00:33:36",
+      "completed_at": null,
+      "difficulty_level": "medium",
+      "region_filter": null
+    },
+    {
+      "id": 161,
+      "game_type": "flags",
+      "game_mode": "solo",
+      "score": 740,
+      "xp_earned": 74,
+      "correct_count": 4,
+      "total_questions": 6,
+      "average_time_ms": 14167,
+      "started_at": "2026-01-08 00:31:41",
+      "completed_at": "2026-01-08 00:33:17",
+      "difficulty_level": "medium",
+      "region_filter": null
+    },
+    {
+      "id": 160,
+      "game_type": "maps",
+      "game_mode": "solo",
+      "score": 0,
+      "xp_earned": 0,
+      "correct_count": 0,
+      "total_questions": 10,
+      "average_time_ms": 0,
+      "started_at": "2026-01-08 00:29:04",
+      "completed_at": null,
+      "difficulty_level": "medium",
+      "region_filter": null
+    },
+    {
+      "id": 159,
+      "game_type": "flags",
+      "game_mode": "solo",
+      "score": 0,
+      "xp_earned": 0,
+      "correct_count": 0,
+      "total_questions": 10,
+      "average_time_ms": 0,
+      "started_at": "2026-01-08 00:23:53",
+      "completed_at": null,
+      "difficulty_level": "medium",
+      "region_filter": null
+    },
+    {
+      "id": 158,
+      "game_type": "flags",
+      "game_mode": "solo",
+      "score": 120,
+      "xp_earned": 12,
+      "correct_count": 1,
+      "total_questions": 10,
+      "average_time_ms": 11500,
+      "started_at": "2026-01-08 00:21:15",
+      "completed_at": "2026-01-08 00:23:31",
+      "difficulty_level": "medium",
+      "region_filter": null
+    }
+  ],
+  "friends": [
+    {
+      "id": 1,
+      "username": "testuser",
+      "overall_level": 3,
+      "friends_since": "2026-01-08 01:43:23"
+    }
+  ],
+  "notifications": [
+    {
+      "id": 26,
+      "type": "match_invite",
+      "title": "Match Invite",
+      "body": "testuser challenged you to a flags match!",
+      "is_read": 1,
+      "created_at": "2026-01-08 01:48:12"
+    },
+    {
+      "id": 25,
+      "type": "friend_accepted",
+      "title": "Friend Request Accepted",
+      "body": "Your friend request was accepted",
+      "is_read": 1,
+      "created_at": "2026-01-08 01:44:37"
+    }
+  ],
+  "dailyChallenges": [
+    {
+      "id": 40,
+      "challenge_type": "play_games",
+      "target_value": 3,
+      "current_value": 0,
+      "is_completed": 0,
+      "xp_reward": 50,
+      "date": "2026-01-07"
+    },
+    {
+      "id": 42,
+      "challenge_type": "perfect_game",
+      "target_value": 1,
+      "current_value": 0,
+      "is_completed": 0,
+      "xp_reward": 100,
+      "date": "2026-01-07"
+    },
+    {
+      "id": 41,
+      "challenge_type": "correct_answers",
+      "target_value": 20,
+      "current_value": 0,
+      "is_completed": 0,
+      "xp_reward": 75,
+      "date": "2026-01-07"
+    }
+  ]
+}

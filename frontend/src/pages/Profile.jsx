@@ -46,6 +46,10 @@ function Profile() {
     const [avatarUploading, setAvatarUploading] = useState(false)
     const [avatarError, setAvatarError] = useState(null)
     const [showAvatarSelector, setShowAvatarSelector] = useState(false)
+    const [showEditProfile, setShowEditProfile] = useState(false)
+    const [editUsername, setEditUsername] = useState('')
+    const [usernameError, setUsernameError] = useState(null)
+    const [usernameSaving, setUsernameSaving] = useState(false)
     const fileInputRef = useRef(null)
 
     // Fetch stats on mount and when user changes
@@ -109,6 +113,71 @@ function Profile() {
             setAvatarError(err.message || 'Failed to save avatar')
         } finally {
             setAvatarUploading(false)
+        }
+    }
+
+    /**
+     * Open edit profile modal.
+     */
+    function openEditProfile() {
+        setEditUsername(user?.username || '')
+        setUsernameError(null)
+        setShowEditProfile(true)
+    }
+
+    /**
+     * Close edit profile modal.
+     */
+    function closeEditProfile() {
+        setShowEditProfile(false)
+        setEditUsername('')
+        setUsernameError(null)
+    }
+
+    /**
+     * Handle username save.
+     */
+    async function handleUsernameSave() {
+        const trimmedUsername = editUsername.trim()
+
+        // Validate username
+        if (!trimmedUsername) {
+            setUsernameError('Username is required')
+            return
+        }
+
+        if (trimmedUsername.length < 3) {
+            setUsernameError('Username must be at least 3 characters')
+            return
+        }
+
+        if (trimmedUsername.length > 20) {
+            setUsernameError('Username must be 20 characters or less')
+            return
+        }
+
+        if (!/^[a-zA-Z0-9_]+$/.test(trimmedUsername)) {
+            setUsernameError('Username can only contain letters, numbers, and underscores')
+            return
+        }
+
+        // Skip if username hasn't changed
+        if (trimmedUsername === user?.username) {
+            closeEditProfile()
+            return
+        }
+
+        setUsernameSaving(true)
+        setUsernameError(null)
+
+        try {
+            await api.patch(`/users/${user.id}`, { username: trimmedUsername })
+            await checkAuth()
+            closeEditProfile()
+        } catch (err) {
+            setUsernameError(err.message || 'Failed to update username')
+        } finally {
+            setUsernameSaving(false)
         }
     }
 
@@ -678,7 +747,24 @@ function Profile() {
                         {avatarError}
                     </p>
                 )}
-                <h2>{user?.username}</h2>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                    <h2>{user?.username}</h2>
+                    <button
+                        onClick={openEditProfile}
+                        style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            fontSize: '16px',
+                            padding: '4px',
+                            color: 'var(--primary)'
+                        }}
+                        title="Edit profile"
+                        aria-label="Edit profile"
+                    >
+                        ✏️
+                    </button>
+                </div>
                 <p className="text-secondary">Level {user?.overall_level || 1}</p>
 
                 <div style={{ display: 'flex', justifyContent: 'center', gap: '32px', marginTop: '16px' }}>
@@ -725,6 +811,99 @@ function Profile() {
                 onSelect={handleAvatarSelect}
                 currentAvatar={parseAvatarData(user?.avatar_url)?.id}
             />
+
+            <Modal
+                isOpen={showEditProfile}
+                onClose={closeEditProfile}
+                title="Edit Profile"
+            >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div>
+                        <label
+                            htmlFor="edit-username"
+                            style={{
+                                display: 'block',
+                                marginBottom: '8px',
+                                fontWeight: '500',
+                                color: 'var(--text-primary)'
+                            }}
+                        >
+                            Username
+                        </label>
+                        <input
+                            id="edit-username"
+                            type="text"
+                            value={editUsername}
+                            onChange={(e) => setEditUsername(e.target.value)}
+                            placeholder="Enter username"
+                            style={{
+                                width: '100%',
+                                padding: '12px',
+                                borderRadius: '8px',
+                                border: usernameError ? '1px solid var(--error)' : '1px solid var(--border)',
+                                backgroundColor: 'var(--surface)',
+                                color: 'var(--text-primary)',
+                                fontSize: '16px'
+                            }}
+                            disabled={usernameSaving}
+                            maxLength={20}
+                        />
+                        {usernameError && (
+                            <p style={{ color: 'var(--error)', fontSize: '14px', marginTop: '4px' }}>
+                                {usernameError}
+                            </p>
+                        )}
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginTop: '4px' }}>
+                            3-20 characters. Letters, numbers, and underscores only.
+                        </p>
+                    </div>
+
+                    <div style={{ marginTop: '8px' }}>
+                        <label
+                            style={{
+                                display: 'block',
+                                marginBottom: '8px',
+                                fontWeight: '500',
+                                color: 'var(--text-primary)'
+                            }}
+                        >
+                            Avatar
+                        </label>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                closeEditProfile()
+                                setShowAvatarSelector(true)
+                            }}
+                            className="btn btn-secondary"
+                            style={{ width: '100%' }}
+                        >
+                            Change Avatar
+                        </button>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+                        <button
+                            type="button"
+                            onClick={closeEditProfile}
+                            className="btn btn-secondary"
+                            style={{ flex: 1 }}
+                            disabled={usernameSaving}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleUsernameSave}
+                            className="btn btn-primary"
+                            style={{ flex: 1 }}
+                            disabled={usernameSaving}
+                        >
+                            {usernameSaving ? 'Saving...' : 'Save'}
+                        </button>
+                    </div>
+                </div>
+            </Modal>
         </div>
     )
 }

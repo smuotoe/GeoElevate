@@ -7,17 +7,39 @@ import { authenticate } from '../middleware/auth.js';
 
 const router = Router();
 
+// Default JWT secrets for development (these should be overridden via .env in production)
+// Fallback keys ensure the app works even without .env configured
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-geo-elevate-2024';
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'dev-refresh-secret-geo-elevate-2024';
+
 /**
  * Register a new user.
  * POST /api/auth/register
  */
 router.post('/register', async (req, res, next) => {
     try {
-        const { email, username, password } = req.body;
+        const { email: rawEmail, username: rawUsername, password } = req.body;
+
+        // Trim whitespace from email and username
+        const email = rawEmail?.trim();
+        const username = rawUsername?.trim();
 
         if (!email || !username || !password) {
             return res.status(400).json({
                 error: { message: 'Email, username, and password are required' }
+            });
+        }
+
+        // Validate username length
+        if (username.length < 3) {
+            return res.status(400).json({
+                error: { message: 'Username must be at least 3 characters' }
+            });
+        }
+
+        if (username.length > 20) {
+            return res.status(400).json({
+                error: { message: 'Username must be at most 20 characters' }
             });
         }
 
@@ -342,7 +364,7 @@ router.post('/reset-password', async (req, res, next) => {
 function generateAccessToken(userId) {
     return jwt.sign(
         { userId },
-        process.env.JWT_SECRET,
+        JWT_SECRET,
         { expiresIn: process.env.JWT_EXPIRES_IN || '15m' }
     );
 }
@@ -356,7 +378,7 @@ function generateAccessToken(userId) {
 function generateRefreshToken(userId) {
     return jwt.sign(
         { userId, tokenId: uuidv4() },
-        process.env.JWT_REFRESH_SECRET,
+        JWT_REFRESH_SECRET,
         { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d' }
     );
 }
