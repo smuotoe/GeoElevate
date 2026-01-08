@@ -1,7 +1,31 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../utils/api'
+
+const STREAK_MILESTONES = [7, 14, 30, 60, 90, 180, 365]
+
+/**
+ * Get milestone message based on streak days.
+ *
+ * @param {number} streak - Current streak
+ * @returns {object|null} Milestone info or null
+ */
+function getStreakMilestone(streak) {
+    if (STREAK_MILESTONES.includes(streak)) {
+        const messages = {
+            7: { title: 'One Week!', message: 'You reached a 7-day streak!' },
+            14: { title: 'Two Weeks!', message: 'You reached a 14-day streak!' },
+            30: { title: 'One Month!', message: 'You reached a 30-day streak!' },
+            60: { title: 'Two Months!', message: 'You reached a 60-day streak!' },
+            90: { title: 'Three Months!', message: 'You reached a 90-day streak!' },
+            180: { title: 'Half Year!', message: 'You reached a 180-day streak!' },
+            365: { title: 'One Year!', message: 'You reached a 365-day streak!' }
+        }
+        return messages[streak] || null
+    }
+    return null
+}
 
 /**
  * Today/Home screen component.
@@ -18,6 +42,32 @@ function Today() {
     const [recommendations, setRecommendations] = useState([])
     const [loadingRecommendations, setLoadingRecommendations] = useState(false)
     const [invites, setInvites] = useState([])
+    const [streakCelebration, setStreakCelebration] = useState(null)
+
+    /**
+     * Check if streak milestone should be celebrated.
+     */
+    const checkStreakMilestone = useCallback(() => {
+        if (!user?.current_streak) return
+
+        const milestone = getStreakMilestone(user.current_streak)
+        if (!milestone) return
+
+        const celebratedKey = `streak_celebrated_${user.id}_${user.current_streak}`
+        const alreadyCelebrated = localStorage.getItem(celebratedKey)
+
+        if (!alreadyCelebrated) {
+            setStreakCelebration({
+                ...milestone,
+                streak: user.current_streak
+            })
+            localStorage.setItem(celebratedKey, 'true')
+        }
+    }, [user])
+
+    useEffect(() => {
+        checkStreakMilestone()
+    }, [checkStreakMilestone])
 
     useEffect(() => {
         let ignore = false
@@ -229,6 +279,108 @@ function Today() {
 
     return (
         <div className="page">
+            {streakCelebration && (
+                <div
+                    className="streak-celebration-overlay"
+                    style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: 'rgba(0, 0, 0, 0.85)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 1000,
+                        animation: 'fadeIn 0.3s ease'
+                    }}
+                    onClick={() => setStreakCelebration(null)}
+                    role="dialog"
+                    aria-labelledby="streak-celebration-title"
+                    aria-modal="true"
+                >
+                    <div
+                        className="streak-celebration-modal"
+                        style={{
+                            backgroundColor: 'var(--surface)',
+                            padding: '32px',
+                            borderRadius: '16px',
+                            textAlign: 'center',
+                            maxWidth: '320px',
+                            animation: 'scaleIn 0.4s ease'
+                        }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div
+                            style={{
+                                fontSize: '64px',
+                                marginBottom: '16px',
+                                animation: 'bounce 0.6s ease infinite'
+                            }}
+                            role="img"
+                            aria-label="celebration"
+                        >
+                            &#127881;
+                        </div>
+                        <h2
+                            id="streak-celebration-title"
+                            style={{
+                                color: 'var(--accent)',
+                                fontSize: '1.75rem',
+                                marginBottom: '8px'
+                            }}
+                        >
+                            {streakCelebration.title}
+                        </h2>
+                        <p style={{ color: 'var(--text-secondary)', marginBottom: '16px' }}>
+                            {streakCelebration.message}
+                        </p>
+                        <div
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '8px',
+                                marginBottom: '24px'
+                            }}
+                        >
+                            <span style={{ fontSize: '32px' }}>&#128293;</span>
+                            <span
+                                style={{
+                                    fontSize: '2.5rem',
+                                    fontWeight: 'bold',
+                                    color: 'var(--primary)'
+                                }}
+                            >
+                                {streakCelebration.streak}
+                            </span>
+                            <span style={{ color: 'var(--text-secondary)' }}>days</span>
+                        </div>
+                        <button
+                            className="btn btn-primary"
+                            onClick={() => setStreakCelebration(null)}
+                            style={{ width: '100%' }}
+                        >
+                            Keep it going!
+                        </button>
+                    </div>
+                </div>
+            )}
+            <style>{`
+                @keyframes fadeIn {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+                @keyframes scaleIn {
+                    from { transform: scale(0.8); opacity: 0; }
+                    to { transform: scale(1); opacity: 1; }
+                }
+                @keyframes bounce {
+                    0%, 100% { transform: translateY(0); }
+                    50% { transform: translateY(-10px); }
+                }
+            `}</style>
             <div className="page-header">
                 <h1 className="page-title">Today</h1>
                 {user && (

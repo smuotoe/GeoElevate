@@ -236,6 +236,40 @@ router.post('/fix-streak/:id', (req, res) => {
 });
 
 /**
+ * Debug endpoint to set user streak to specific value (for testing).
+ * POST /api/games/set-streak/:id
+ */
+router.post('/set-streak/:id', (req, res) => {
+    const db = getDb();
+    const { streak } = req.body;
+
+    if (typeof streak !== 'number' || streak < 0) {
+        return res.status(400).json({ error: 'Invalid streak value' });
+    }
+
+    // Get user before update
+    const before = db.prepare(
+        'SELECT id, username, current_streak FROM users WHERE id = ?'
+    ).get(req.params.id);
+
+    if (!before) {
+        return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Update streak
+    db.prepare(
+        'UPDATE users SET current_streak = ? WHERE id = ?'
+    ).run(streak, req.params.id);
+
+    // Get user after update
+    const after = db.prepare(
+        'SELECT id, username, current_streak FROM users WHERE id = ?'
+    ).get(req.params.id);
+
+    res.json({ before, after, message: `Streak set to ${streak}` });
+});
+
+/**
  * Get available regions/continents for filtering.
  * GET /api/games/regions
  */
