@@ -382,6 +382,56 @@ router.get('/sessions/:id', authenticate, (req, res, next) => {
 });
 
 /**
+ * GET /api/games/sessions
+ * Get recent game sessions for the authenticated user.
+ */
+router.get('/sessions', authenticate, (req, res, next) => {
+    try {
+        const db = getDb();
+        const limit = Math.min(parseInt(req.query.limit) || 10, 50);
+        const offset = parseInt(req.query.offset) || 0;
+
+        const sessions = db.prepare(`
+            SELECT
+                id,
+                game_type,
+                game_mode,
+                difficulty_level,
+                score,
+                xp_earned,
+                correct_count,
+                total_questions,
+                average_time_ms,
+                started_at,
+                completed_at
+            FROM game_sessions
+            WHERE user_id = ? AND completed_at IS NOT NULL
+            ORDER BY completed_at DESC
+            LIMIT ? OFFSET ?
+        `).all(req.userId, limit, offset);
+
+        const totalCount = db.prepare(`
+            SELECT COUNT(*) as count FROM game_sessions
+            WHERE user_id = ? AND completed_at IS NOT NULL
+        `).get(req.userId);
+
+        res.json({
+            sessions: sessions.map(s => ({
+                ...s,
+                accuracy: s.total_questions > 0
+                    ? Math.round((s.correct_count / s.total_questions) * 100)
+                    : 0
+            })),
+            total: totalCount.count,
+            limit,
+            offset
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/**
  * Get population threshold for difficulty filtering.
  * Easy = well-known countries (high population)
  * Medium = mix of countries

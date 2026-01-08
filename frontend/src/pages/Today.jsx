@@ -12,6 +12,8 @@ function Today() {
     const { user } = useAuth()
     const [challenges, setChallenges] = useState([])
     const [loadingChallenges, setLoadingChallenges] = useState(false)
+    const [recentGames, setRecentGames] = useState([])
+    const [loadingGames, setLoadingGames] = useState(false)
 
     useEffect(() => {
         let ignore = false
@@ -38,6 +40,37 @@ function Today() {
 
         if (user) {
             fetchChallenges()
+        }
+
+        return () => {
+            ignore = true
+        }
+    }, [user])
+
+    useEffect(() => {
+        let ignore = false
+
+        async function fetchRecentGames() {
+            setLoadingGames(true)
+            try {
+                const data = await api.get('/games/sessions?limit=5')
+                if (!ignore) {
+                    setRecentGames(data.sessions || [])
+                }
+            } catch (err) {
+                if (!ignore) {
+                    console.error('Failed to fetch recent games:', err)
+                    setRecentGames([])
+                }
+            } finally {
+                if (!ignore) {
+                    setLoadingGames(false)
+                }
+            }
+        }
+
+        if (user) {
+            fetchRecentGames()
         }
 
         return () => {
@@ -212,9 +245,40 @@ function Today() {
 
                     <section className="mb-md">
                         <h3 className="mb-sm">Recent Games</h3>
-                        <div className="card">
-                            <p className="text-secondary">Your recent games will appear here.</p>
-                        </div>
+                        {loadingGames ? (
+                            <div className="card">
+                                <p className="text-secondary">Loading recent games...</p>
+                            </div>
+                        ) : recentGames.length > 0 ? (
+                            <div className="recent-games-list">
+                                {recentGames.map(game => (
+                                    <div key={game.id} className="card" style={{ marginBottom: '8px', padding: '12px 16px' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div>
+                                                <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>
+                                                    {game.game_type}
+                                                </span>
+                                                <span className="text-secondary" style={{ marginLeft: '8px', fontSize: '0.85rem' }}>
+                                                    {game.correct_count}/{game.total_questions} correct ({game.accuracy}%)
+                                                </span>
+                                            </div>
+                                            <div style={{ textAlign: 'right' }}>
+                                                <div style={{ fontWeight: 600, color: 'var(--primary)' }}>
+                                                    {game.score} pts
+                                                </div>
+                                                <div className="text-secondary" style={{ fontSize: '0.75rem' }}>
+                                                    {new Date(game.completed_at).toLocaleDateString()}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="card">
+                                <p className="text-secondary">Your recent games will appear here.</p>
+                            </div>
+                        )}
                     </section>
                 </>
             )}
