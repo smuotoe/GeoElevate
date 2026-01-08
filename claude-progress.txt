@@ -1,5 +1,41 @@
 # GeoElevate - Progress Report
 
+## Session 30 Progress
+- **Date**: January 8, 2026
+- **Status**: 269/302 features passing (89.1%)
+- **Focus**: Leaderboard position change tracking
+
+### Features Completed This Session
+
+#### Feature #249: Leaderboard position change tracking
+- **Implementation**:
+  - Added `getPreviousRank()` function to query yesterday's rank from snapshots
+  - Added `saveRankSnapshot()` function to save daily rank snapshots
+  - Added `calculateRankChange()` function to compute rank difference
+  - Modified global leaderboard endpoint to include `rankChange` in response
+  - Added CSS styles for rank change indicators (`.rankUp`, `.rankDown`)
+  - Green badge (+N) for improved ranks, red badge (-N) for dropped ranks
+  - Rank snapshots stored in `leaderboard_snapshots` table
+- **Files Modified**:
+  - `backend/src/routes/leaderboards.js` - Added rank tracking logic
+  - `frontend/src/pages/Leaderboards.jsx` - Display rank change indicators
+  - `frontend/src/pages/Leaderboards.module.css` - Styling for indicators
+  - `backend/seed-rank-snapshots.js` - Test script for seeding historical data
+- **Verification**:
+  - Created seed script to populate yesterday's rank snapshots
+  - Verified API returns `rankChange` values (+1, -1, +2, etc.)
+  - Verified UI displays green/red indicators next to rankings
+  - Screenshot captured showing rank changes
+- **Result**: Fully functional rank change tracking
+
+### Features Skipped (Cannot Test)
+- Most remaining features require:
+  - Two-player testing (multiplayer)
+  - Service workers (offline, push notifications)
+  - UI elements that don't exist (search, date pickers)
+
+---
+
 ## Session 29 Progress
 - **Date**: January 8, 2026
 - **Status**: 268/302 features passing (88.7%)
