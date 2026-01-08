@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import Modal from '../components/Modal'
 import { api } from '../utils/api'
 
@@ -266,7 +266,17 @@ function Friends() {
                                     borderRadius: 'var(--radius-md)'
                                 }}
                             >
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <Link
+                                    to={`/profile/${friend.id}`}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '12px',
+                                        textDecoration: 'none',
+                                        color: 'inherit',
+                                        flex: 1
+                                    }}
+                                >
                                     <div
                                         style={{
                                             width: 40,
@@ -288,7 +298,7 @@ function Friends() {
                                             Level {friend.overall_level || 1} | {friend.overall_xp || 0} XP
                                         </div>
                                     </div>
-                                </div>
+                                </Link>
                                 <button
                                     className="btn btn-secondary"
                                     style={{ padding: '8px 12px', minHeight: 'auto', fontSize: '0.875rem' }}

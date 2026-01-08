@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../utils/api'
 import Modal from '../components/Modal'
@@ -35,6 +35,15 @@ function parseAvatarData(avatarUrl) {
  */
 function Profile() {
     const { user, checkAuth } = useAuth()
+    const { userId: paramUserId } = useParams()
+    const navigate = useNavigate()
+
+    // Determine if viewing own profile or another user's profile
+    const isOwnProfile = !paramUserId || (user && paramUserId === String(user.id))
+    const viewingUserId = paramUserId ? parseInt(paramUserId, 10) : user?.id
+
+    const [profileUser, setProfileUser] = useState(null)
+    const [profileLoading, setProfileLoading] = useState(false)
     const [activeTab, setActiveTab] = useState('performance')
     const [stats, setStats] = useState(null)
     const [achievements, setAchievements] = useState(null)
@@ -52,27 +61,50 @@ function Profile() {
     const [usernameSaving, setUsernameSaving] = useState(false)
     const fileInputRef = useRef(null)
 
-    // Fetch stats on mount and when user changes
+    // Fetch other user's profile if viewing someone else
     useEffect(() => {
-        if (user?.id) {
+        async function fetchOtherUserProfile() {
+            if (!paramUserId || isOwnProfile) {
+                setProfileUser(null)
+                return
+            }
+
+            setProfileLoading(true)
+            try {
+                const data = await api.get(`/users/${paramUserId}`)
+                setProfileUser(data.user || data)
+            } catch (err) {
+                console.error('Failed to fetch user profile:', err)
+                setProfileUser(null)
+            } finally {
+                setProfileLoading(false)
+            }
+        }
+        fetchOtherUserProfile()
+    }, [paramUserId, isOwnProfile])
+
+    // Fetch stats on mount and when user/viewingUserId changes
+    useEffect(() => {
+        if (viewingUserId) {
             fetchStats()
         }
-    }, [user?.id])
+    }, [viewingUserId])
 
     useEffect(() => {
-        if (activeTab === 'achievements' && user?.id && !achievements && !achievementsLoading) {
+        if (activeTab === 'achievements' && viewingUserId && !achievements && !achievementsLoading) {
             fetchAchievements()
         }
-    }, [activeTab, user?.id, achievements, achievementsLoading])
+    }, [activeTab, viewingUserId, achievements, achievementsLoading])
 
     /**
      * Fetch user stats from API.
      */
     async function fetchStats() {
+        if (!viewingUserId) return
         setStatsLoading(true)
         setStatsError(null)
         try {
-            const data = await api.get(`/users/${user.id}/stats`)
+            const data = await api.get(`/users/${viewingUserId}/stats`)
             setStats(data)
         } catch (err) {
             setStatsError(err.message || 'Failed to load stats')
@@ -85,10 +117,11 @@ function Profile() {
      * Fetch user achievements from API.
      */
     async function fetchAchievements() {
+        if (!viewingUserId) return
         setAchievementsLoading(true)
         setAchievementsError(null)
         try {
-            const data = await api.get(`/users/${user.id}/achievements`)
+            const data = await api.get(`/users/${viewingUserId}/achievements`)
             setAchievements(data)
         } catch (err) {
             setAchievementsError(err.message || 'Failed to load achievements')
@@ -245,7 +278,8 @@ function Profile() {
      * @returns {React.ReactElement} Avatar element
      */
     function renderAvatar() {
-        const avatarData = parseAvatarData(user?.avatar_url)
+        const avatarUser = isOwnProfile ? user : profileUser
+        const avatarData = parseAvatarData(avatarUser?.avatar_url)
 
         // JSON emoji avatar
         if (avatarData && avatarData.emoji && avatarData.color) {
@@ -269,11 +303,11 @@ function Profile() {
         }
 
         // URL-based image avatar
-        if (user?.avatar_url && !user.avatar_url.includes('default') && !user.avatar_url.startsWith('{')) {
+        if (avatarUser?.avatar_url && !avatarUser.avatar_url.includes('default') && !avatarUser.avatar_url.startsWith('{')) {
             return (
                 <img
-                    src={user.avatar_url}
-                    alt={user.username}
+                    src={avatarUser.avatar_url}
+                    alt={avatarUser.username}
                     style={{
                         width: 80,
                         height: 80,
@@ -299,7 +333,7 @@ function Profile() {
                     fontSize: '32px'
                 }}
             >
-                {user?.username?.[0]?.toUpperCase() || '?'}
+                {avatarUser?.username?.[0]?.toUpperCase() || '?'}
             </div>
         )
     }
@@ -700,80 +734,140 @@ function Profile() {
         )
     }
 
+    // Determine which user data to display
+    const displayUser = isOwnProfile ? user : profileUser
+
+    // Show loading state when fetching other user's profile
+    if (profileLoading) {
+        return (
+            <div className="page">
+                <div className="page-header">
+                    <button className="btn btn-secondary" onClick={() => navigate(-1)}>
+                        Back
+                    </button>
+                    <h1 className="page-title">Profile</h1>
+                    <div style={{ width: 70 }} />
+                </div>
+                <div className="card" style={{ textAlign: 'center', padding: '40px' }}>
+                    <div className="loading-spinner" style={{ margin: '0 auto' }} />
+                    <p className="text-secondary mt-md">Loading profile...</p>
+                </div>
+            </div>
+        )
+    }
+
+    // Show not found state if viewing another user who doesn't exist
+    if (!isOwnProfile && !profileUser) {
+        return (
+            <div className="page">
+                <div className="page-header">
+                    <button className="btn btn-secondary" onClick={() => navigate(-1)}>
+                        Back
+                    </button>
+                    <h1 className="page-title">Profile</h1>
+                    <div style={{ width: 70 }} />
+                </div>
+                <div className="card" style={{ textAlign: 'center', padding: '40px' }}>
+                    <p className="text-secondary">User not found</p>
+                    <button className="btn btn-primary mt-md" onClick={() => navigate('/friends')}>
+                        Back to Friends
+                    </button>
+                </div>
+            </div>
+        )
+    }
+
     return (
         <div className="page">
             <div className="page-header">
-                <h1 className="page-title">Profile</h1>
-                <Link to="/settings" className="btn btn-secondary">
-                    Settings
-                </Link>
+                {!isOwnProfile && (
+                    <button className="btn btn-secondary" onClick={() => navigate(-1)}>
+                        Back
+                    </button>
+                )}
+                <h1 className="page-title">{isOwnProfile ? 'Profile' : `${displayUser?.username}'s Profile`}</h1>
+                {isOwnProfile ? (
+                    <Link to="/settings" className="btn btn-secondary">
+                        Settings
+                    </Link>
+                ) : (
+                    <Link to="/multiplayer" className="btn btn-primary">
+                        Challenge
+                    </Link>
+                )}
             </div>
 
             <div className="card mb-md" style={{ textAlign: 'center' }}>
                 <div style={{ position: 'relative', display: 'inline-block', marginBottom: '12px' }}>
                     {renderAvatar()}
-                    <button
-                        onClick={() => setShowAvatarSelector(true)}
-                        disabled={avatarUploading}
-                        style={{
-                            position: 'absolute',
-                            bottom: 0,
-                            right: 0,
-                            width: 28,
-                            height: 28,
-                            borderRadius: '50%',
-                            background: 'var(--bg-secondary)',
-                            border: '2px solid var(--bg-primary)',
-                            cursor: avatarUploading ? 'wait' : 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: '14px'
-                        }}
-                        title="Change avatar"
-                    >
-                        {avatarUploading ? '...' : '📷'}
-                    </button>
-                    <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/jpeg,image/png,image/gif,image/webp"
-                        onChange={handleAvatarChange}
-                        style={{ display: 'none' }}
-                    />
+                    {isOwnProfile && (
+                        <button
+                            onClick={() => setShowAvatarSelector(true)}
+                            disabled={avatarUploading}
+                            style={{
+                                position: 'absolute',
+                                bottom: 0,
+                                right: 0,
+                                width: 28,
+                                height: 28,
+                                borderRadius: '50%',
+                                background: 'var(--bg-secondary)',
+                                border: '2px solid var(--bg-primary)',
+                                cursor: avatarUploading ? 'wait' : 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '14px'
+                            }}
+                            title="Change avatar"
+                        >
+                            {avatarUploading ? '...' : '📷'}
+                        </button>
+                    )}
+                    {isOwnProfile && (
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/jpeg,image/png,image/gif,image/webp"
+                            onChange={handleAvatarChange}
+                            style={{ display: 'none' }}
+                        />
+                    )}
                 </div>
-                {avatarError && (
+                {avatarError && isOwnProfile && (
                     <p style={{ color: 'var(--color-error)', fontSize: '14px', marginBottom: '8px' }}>
                         {avatarError}
                     </p>
                 )}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                    <h2>{user?.username}</h2>
-                    <button
-                        onClick={openEditProfile}
-                        style={{
-                            background: 'none',
-                            border: 'none',
-                            cursor: 'pointer',
-                            fontSize: '16px',
-                            padding: '4px',
-                            color: 'var(--primary)'
-                        }}
-                        title="Edit profile"
-                        aria-label="Edit profile"
-                    >
-                        ✏️
-                    </button>
+                    <h2>{displayUser?.username}</h2>
+                    {isOwnProfile && (
+                        <button
+                            onClick={openEditProfile}
+                            style={{
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                fontSize: '16px',
+                                padding: '4px',
+                                color: 'var(--primary)'
+                            }}
+                            title="Edit profile"
+                            aria-label="Edit profile"
+                        >
+                            ✏️
+                        </button>
+                    )}
                 </div>
-                <p className="text-secondary">Level {user?.overall_level || 1}</p>
+                <p className="text-secondary">Level {displayUser?.overall_level || 1}</p>
 
                 <div style={{ display: 'flex', justifyContent: 'center', gap: '32px', marginTop: '16px' }}>
                     <div>
-                        <div style={{ fontSize: '24px', fontWeight: '600' }}>{user?.overall_xp || 0}</div>
+                        <div style={{ fontSize: '24px', fontWeight: '600' }}>{displayUser?.overall_xp || 0}</div>
                         <div className="text-secondary">XP</div>
                     </div>
                     <div>
-                        <div style={{ fontSize: '24px', fontWeight: '600' }}>{user?.current_streak || 0}</div>
+                        <div style={{ fontSize: '24px', fontWeight: '600' }}>{displayUser?.current_streak || 0}</div>
                         <div className="text-secondary">Streak</div>
                     </div>
                 </div>
@@ -798,25 +892,30 @@ function Profile() {
                 {activeTab === 'performance' ? renderPerformanceTab() : renderAchievementsTab()}
             </div>
 
-            <Link to="/friends" className="card mt-md" style={{ display: 'block', textDecoration: 'none' }}>
-                <h3 style={{ color: 'var(--text-primary)' }}>Friends</h3>
-                <p className="text-secondary">View and manage your friends</p>
-            </Link>
+            {isOwnProfile && (
+                <Link to="/friends" className="card mt-md" style={{ display: 'block', textDecoration: 'none' }}>
+                    <h3 style={{ color: 'var(--text-primary)' }}>Friends</h3>
+                    <p className="text-secondary">View and manage your friends</p>
+                </Link>
+            )}
 
-            {renderAchievementModal()}
+            {isOwnProfile && renderAchievementModal()}
 
-            <AvatarSelector
-                isOpen={showAvatarSelector}
-                onClose={() => setShowAvatarSelector(false)}
-                onSelect={handleAvatarSelect}
-                currentAvatar={parseAvatarData(user?.avatar_url)?.id}
-            />
+            {isOwnProfile && (
+                <AvatarSelector
+                    isOpen={showAvatarSelector}
+                    onClose={() => setShowAvatarSelector(false)}
+                    onSelect={handleAvatarSelect}
+                    currentAvatar={parseAvatarData(user?.avatar_url)?.id}
+                />
+            )}
 
-            <Modal
-                isOpen={showEditProfile}
-                onClose={closeEditProfile}
-                title="Edit Profile"
-            >
+            {isOwnProfile && (
+                <Modal
+                    isOpen={showEditProfile}
+                    onClose={closeEditProfile}
+                    title="Edit Profile"
+                >
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                     <div>
                         <label
@@ -903,7 +1002,8 @@ function Profile() {
                         </button>
                     </div>
                 </div>
-            </Modal>
+                </Modal>
+            )}
         </div>
     )
 }
