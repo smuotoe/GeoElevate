@@ -200,4 +200,33 @@ router.get('/matches/:id', authenticate, (req, res, next) => {
     }
 });
 
+/**
+ * Get match history for the current user.
+ * GET /api/multiplayer/history
+ */
+router.get('/history', authenticate, (req, res, next) => {
+    try {
+        const db = getDb();
+
+        const matches = db.prepare(`
+            SELECT m.*,
+                   c.username as challenger_name, c.avatar_url as challenger_avatar,
+                   o.username as opponent_name, o.avatar_url as opponent_avatar,
+                   w.username as winner_name
+            FROM multiplayer_matches m
+            JOIN users c ON c.id = m.challenger_id
+            JOIN users o ON o.id = m.opponent_id
+            LEFT JOIN users w ON w.id = m.winner_id
+            WHERE (m.challenger_id = ? OR m.opponent_id = ?)
+            AND m.status = 'completed'
+            ORDER BY m.completed_at DESC
+            LIMIT 20
+        `).all(req.userId, req.userId);
+
+        res.json({ matches });
+    } catch (err) {
+        next(err);
+    }
+});
+
 export default router;

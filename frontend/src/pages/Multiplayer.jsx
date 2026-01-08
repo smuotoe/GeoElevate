@@ -16,6 +16,7 @@ function Multiplayer() {
     const [invites, setInvites] = useState([])
     const [friends, setFriends] = useState([])
     const [match, setMatch] = useState(null)
+    const [matchHistory, setMatchHistory] = useState([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
     const [challengingFriendId, setChallengingFriendId] = useState(null)
@@ -59,12 +60,14 @@ function Multiplayer() {
     async function loadData() {
         setLoading(true)
         try {
-            const [invitesRes, friendsRes] = await Promise.all([
+            const [invitesRes, friendsRes, historyRes] = await Promise.all([
                 api.get('/multiplayer/invites'),
-                api.get('/friends')
+                api.get('/friends'),
+                api.get('/multiplayer/history')
             ])
             setInvites(invitesRes.invites || [])
             setFriends(friendsRes.friends || [])
+            setMatchHistory(historyRes.matches || [])
 
             if (matchId) {
                 const matchData = await fetchMatch()
@@ -343,6 +346,96 @@ function Multiplayer() {
                                     </div>
                                 </div>
                             ))}
+                        </div>
+                    )}
+                </section>
+
+                <section className="mb-lg">
+                    <h2 className="mb-md">Match History</h2>
+                    {matchHistory.length === 0 ? (
+                        <div className="empty-state">
+                            <p className="text-secondary">No completed matches yet</p>
+                        </div>
+                    ) : (
+                        <div className="match-history-list">
+                            {matchHistory.map(m => {
+                                const isChallenger = m.challenger_id === user?.id
+                                const opponentName = isChallenger ? m.opponent_name : m.challenger_name
+                                const userScore = isChallenger ? m.challenger_score : m.opponent_score
+                                const opponentScore = isChallenger ? m.opponent_score : m.challenger_score
+                                const isWinner = m.winner_id === user?.id
+                                const isTie = m.winner_id === null
+
+                                return (
+                                    <div
+                                        key={m.id}
+                                        className="card mb-sm"
+                                        style={{ padding: '16px' }}
+                                        onClick={() => navigate(`/multiplayer/match/${m.id}`)}
+                                        role="button"
+                                        tabIndex={0}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                navigate(`/multiplayer/match/${m.id}`)
+                                            }
+                                        }}
+                                    >
+                                        <div style={{
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            marginBottom: '8px'
+                                        }}>
+                                            <div style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '12px'
+                                            }}>
+                                                <span style={{
+                                                    fontSize: '0.75rem',
+                                                    padding: '4px 8px',
+                                                    borderRadius: '4px',
+                                                    background: 'var(--surface-light)',
+                                                    textTransform: 'capitalize'
+                                                }}>
+                                                    {m.game_type}
+                                                </span>
+                                                <span className="text-secondary" style={{ fontSize: '0.875rem' }}>
+                                                    vs {opponentName}
+                                                </span>
+                                            </div>
+                                            <span style={{
+                                                fontSize: '0.75rem',
+                                                padding: '4px 8px',
+                                                borderRadius: '4px',
+                                                fontWeight: '600',
+                                                background: isTie
+                                                    ? 'var(--surface-light)'
+                                                    : isWinner
+                                                        ? 'var(--success)'
+                                                        : 'var(--error)',
+                                                color: isTie ? 'var(--text-secondary)' : 'white'
+                                            }}>
+                                                {isTie ? 'Tie' : isWinner ? 'Won' : 'Lost'}
+                                            </span>
+                                        </div>
+                                        <div style={{
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center'
+                                        }}>
+                                            <div style={{ fontSize: '1.25rem', fontWeight: '600' }}>
+                                                {userScore} - {opponentScore}
+                                            </div>
+                                            <span className="text-secondary" style={{ fontSize: '0.75rem' }}>
+                                                {m.completed_at
+                                                    ? new Date(m.completed_at).toLocaleDateString()
+                                                    : 'Unknown date'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                )
+                            })}
                         </div>
                     )}
                 </section>
