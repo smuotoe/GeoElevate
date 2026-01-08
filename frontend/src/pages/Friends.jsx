@@ -277,23 +277,45 @@ function Friends() {
                                         flex: 1
                                     }}
                                 >
-                                    <div
-                                        style={{
-                                            width: 40,
-                                            height: 40,
-                                            borderRadius: '50%',
-                                            background: 'var(--secondary)',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            color: 'var(--background)',
-                                            fontWeight: 600
-                                        }}
-                                    >
-                                        {friend.username?.charAt(0).toUpperCase() || '?'}
+                                    <div style={{ position: 'relative' }}>
+                                        <div
+                                            style={{
+                                                width: 40,
+                                                height: 40,
+                                                borderRadius: '50%',
+                                                background: 'var(--secondary)',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                color: 'var(--background)',
+                                                fontWeight: 600
+                                            }}
+                                        >
+                                            {friend.username?.charAt(0).toUpperCase() || '?'}
+                                        </div>
+                                        <div
+                                            style={{
+                                                position: 'absolute',
+                                                bottom: 0,
+                                                right: 0,
+                                                width: 12,
+                                                height: 12,
+                                                borderRadius: '50%',
+                                                background: friend.isOnline ? 'var(--success)' : 'var(--text-secondary)',
+                                                border: '2px solid var(--background)',
+                                            }}
+                                            title={friend.isOnline ? 'Online' : 'Offline'}
+                                        />
                                     </div>
                                     <div>
-                                        <div style={{ fontWeight: 500 }}>{friend.username}</div>
+                                        <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            {friend.username}
+                                            {friend.isOnline && (
+                                                <span style={{ fontSize: '0.75rem', color: 'var(--success)' }}>
+                                                    Online
+                                                </span>
+                                            )}
+                                        </div>
                                         <div className="text-secondary" style={{ fontSize: '0.875rem' }}>
                                             Level {friend.overall_level || 1} | {friend.overall_xp || 0} XP
                                         </div>

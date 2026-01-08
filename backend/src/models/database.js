@@ -604,6 +604,13 @@ function createTables() {
         // Columns may already exist, ignore error
     }
 
+    // Add last_active_at column for online/offline status tracking (migration)
+    try {
+        db.run('ALTER TABLE users ADD COLUMN last_active_at DATETIME');
+    } catch (e) {
+        // Column may already exist, ignore error
+    }
+
     // Create indexes for performance
     db.run('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)');
     db.run('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)');

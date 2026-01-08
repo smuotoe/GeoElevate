@@ -119,6 +119,14 @@ function setupWebSocketHandlers(wss, port) {
         userConnections.set(userId, ws);
         ws.userId = userId;
 
+        // Update last_active_at in database
+        try {
+            const db = getDb();
+            db.prepare('UPDATE users SET last_active_at = CURRENT_TIMESTAMP WHERE id = ?').run(userId);
+        } catch (err) {
+            console.error('Failed to update last_active_at:', err);
+        }
+
         console.log(`WebSocket: User ${userId} connected`);
 
         ws.on('message', (data) => {
@@ -551,4 +559,29 @@ function broadcastToMatchExcept(matchId, excludeUserId, message) {
     }
 }
 
-export default { initWebSocket };
+/**
+ * Check if a user is currently online (has active WebSocket connection).
+ *
+ * @param {number} userId - User ID to check
+ * @returns {boolean} True if user has active WebSocket connection
+ */
+export function isUserOnline(userId) {
+    const ws = userConnections.get(userId);
+    return ws && ws.readyState === 1; // 1 = OPEN
+}
+
+/**
+ * Get online status for multiple users.
+ *
+ * @param {Array<number>} userIds - Array of user IDs to check
+ * @returns {Object} Map of userId -> boolean online status
+ */
+export function getOnlineStatus(userIds) {
+    const status = {};
+    for (const userId of userIds) {
+        status[userId] = isUserOnline(userId);
+    }
+    return status;
+}
+
+export default { initWebSocket, isUserOnline, getOnlineStatus };

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getDb } from '../models/database.js';
 import { authenticate } from '../middleware/auth.js';
+import { getOnlineStatus } from '../services/websocket.js';
 
 const router = Router();
 
@@ -37,7 +38,7 @@ router.get('/', authenticate, (req, res, next) => {
 
         const friends = db.prepare(`
             SELECT u.id, u.username, u.avatar_url, u.overall_xp, u.overall_level,
-                   u.current_streak, u.last_login_at, f.accepted_at
+                   u.current_streak, u.last_login_at, u.last_active_at, f.accepted_at
             FROM friendships f
             JOIN users u ON (
                 CASE
@@ -49,7 +50,17 @@ router.get('/', authenticate, (req, res, next) => {
             AND f.status = 'accepted'
         `).all(req.userId, req.userId, req.userId);
 
-        res.json({ friends });
+        // Get online status for all friends
+        const friendIds = friends.map(f => f.id);
+        const onlineStatus = getOnlineStatus(friendIds);
+
+        // Add online status to each friend
+        const friendsWithStatus = friends.map(friend => ({
+            ...friend,
+            isOnline: onlineStatus[friend.id] || false
+        }));
+
+        res.json({ friends: friendsWithStatus });
     } catch (err) {
         next(err);
     }
