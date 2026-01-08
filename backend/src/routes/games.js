@@ -1082,6 +1082,13 @@ function updateUserStats(db, userId, gameType, score, xpEarned, correctCount, to
     } catch (challengeErr) {
         console.error('ERROR in updateDailyChallengeProgress:', challengeErr);
     }
+
+    // Check if this score beats any friend's high score and notify them
+    try {
+        notifyFriendsOfBeatenScore(db, userId, gameType, score);
+    } catch (notifyErr) {
+        console.error('ERROR in notifyFriendsOfBeatenScore:', notifyErr);
+    }
 }
 
 /**
@@ -1329,6 +1336,55 @@ function updateDailyChallengeProgress(db, userId, gameType, correctCount, totalQ
 }
 
 /**
+ * Notify friends when user beats their high score in a game type.
+ *
+ * @param {object} db - Database instance
+ * @param {number} userId - User ID who achieved the score
+ * @param {string} gameType - Type of game played
+ * @param {number} score - Score achieved
+ */
+function notifyFriendsOfBeatenScore(db, userId, gameType, score) {
+    // Get the user's username
+    const user = db.prepare('SELECT username FROM users WHERE id = ?').get(userId);
+    if (!user) return;
+
+    // Get all friends
+    const friends = db.prepare(`
+        SELECT DISTINCT
+            CASE WHEN user_id = ? THEN friend_id ELSE user_id END as friend_id
+        FROM friendships
+        WHERE (user_id = ? OR friend_id = ?) AND status = 'accepted'
+    `).all(userId, userId, userId);
+
+    for (const friend of friends) {
+        // Get friend's high score for this game type
+        const friendStats = db.prepare(`
+            SELECT high_score FROM user_category_stats
+            WHERE user_id = ? AND category = ?
+        `).get(friend.friend_id, gameType);
+
+        // If user's score beats friend's high score, notify the friend
+        if (friendStats && score > friendStats.high_score && friendStats.high_score > 0) {
+            db.prepare(`
+                INSERT INTO notifications (user_id, type, title, body, data_json)
+                VALUES (?, 'score_beaten', 'High Score Beaten!', ?, ?)
+            `).run(
+                friend.friend_id,
+                `${user.username} beat your ${gameType} high score with ${score} points!`,
+                JSON.stringify({
+                    beatenBy: userId,
+                    username: user.username,
+                    gameType,
+                    newScore: score,
+                    oldScore: friendStats.high_score
+                })
+            );
+            console.log(`Notified friend ${friend.friend_id} that ${user.username} beat their ${gameType} score`);
+        }
+    }
+}
+
+/**
  * Update spaced repetition data for answered questions using SM-2 algorithm.
  * This tracks which facts the user knows well vs needs more practice on.
  *
@@ -1422,3 +1478,5 @@ function updateSpacedRepetition(db, userId, gameType, answers) {
 }
 
 export default router;
+// reload
+// trigger
