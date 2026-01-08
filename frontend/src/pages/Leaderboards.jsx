@@ -224,6 +224,11 @@ function Leaderboards() {
                                     ) : (
                                         <span>#{entry.rank}</span>
                                     )}
+                                    {entry.rankChange !== null && entry.rankChange !== undefined && entry.rankChange !== 0 && (
+                                        <span className={`${styles.rankChange} ${entry.rankChange > 0 ? styles.rankUp : styles.rankDown}`}>
+                                            {entry.rankChange > 0 ? '+' : ''}{entry.rankChange}
+                                        </span>
+                                    )}
                                 </div>
                                 <div className={styles.avatar}>
                                     {(() => {

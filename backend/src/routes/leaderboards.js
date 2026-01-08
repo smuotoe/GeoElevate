@@ -6,6 +6,84 @@ const router = Router();
 const VALID_GAME_TYPES = ['flags', 'capitals', 'maps', 'languages', 'trivia'];
 
 /**
+ * Get the date string for yesterday in YYYY-MM-DD format.
+ *
+ * @returns {string} Yesterday's date string
+ */
+function getYesterdayDate() {
+    const date = new Date();
+    date.setDate(date.getDate() - 1);
+    return date.toISOString().split('T')[0];
+}
+
+/**
+ * Get the date string for today in YYYY-MM-DD format.
+ *
+ * @returns {string} Today's date string
+ */
+function getTodayDate() {
+    return new Date().toISOString().split('T')[0];
+}
+
+/**
+ * Get previous rank for a user from snapshots.
+ *
+ * @param {object} db - Database instance
+ * @param {number} userId - User ID
+ * @param {string} leaderboardType - Type of leaderboard (global, weekly, game_type)
+ * @returns {number|null} Previous rank or null if not found
+ */
+function getPreviousRank(db, userId, leaderboardType) {
+    const yesterday = getYesterdayDate();
+    // Use LIKE pattern for date matching since sql.js DATE() may behave differently
+    const snapshot = db.prepare(`
+        SELECT rank FROM leaderboard_snapshots
+        WHERE user_id = ? AND leaderboard_type = ? AND created_at LIKE ?
+        ORDER BY created_at DESC
+        LIMIT 1
+    `).get(userId, leaderboardType, `${yesterday}%`);
+    return snapshot?.rank || null;
+}
+
+/**
+ * Save current rank snapshot for a user.
+ *
+ * @param {object} db - Database instance
+ * @param {number} userId - User ID
+ * @param {string} leaderboardType - Type of leaderboard
+ * @param {number} rank - Current rank
+ * @param {number} score - Current score
+ */
+function saveRankSnapshot(db, userId, leaderboardType, rank, score) {
+    const today = getTodayDate();
+    // Check if we already have a snapshot for today using LIKE pattern
+    const existing = db.prepare(`
+        SELECT id FROM leaderboard_snapshots
+        WHERE user_id = ? AND leaderboard_type = ? AND created_at LIKE ?
+    `).get(userId, leaderboardType, `${today}%`);
+
+    if (!existing) {
+        db.prepare(`
+            INSERT INTO leaderboard_snapshots (leaderboard_type, user_id, score, rank)
+            VALUES (?, ?, ?, ?)
+        `).run(leaderboardType, userId, score, rank);
+    }
+}
+
+/**
+ * Calculate rank change (positive = improved, negative = dropped).
+ *
+ * @param {number} currentRank - Current rank
+ * @param {number|null} previousRank - Previous rank
+ * @returns {number|null} Rank change or null if no previous data
+ */
+function calculateRankChange(currentRank, previousRank) {
+    if (previousRank === null) return null;
+    // Lower rank number is better, so if previous was 5 and now is 3, change is +2 (improved)
+    return previousRank - currentRank;
+}
+
+/**
  * Get global all-time leaderboard.
  * GET /api/leaderboards/global
  */
@@ -23,18 +101,35 @@ router.get('/global', optionalAuthenticate, (req, res, next) => {
             LIMIT ? OFFSET ?
         `).all(parseInt(limit), parseInt(offset));
 
+        // Add rank change for each user
+        const leaderboardWithChanges = leaderboard.map(entry => {
+            const previousRank = getPreviousRank(db, entry.id, 'global');
+            const rankChange = calculateRankChange(entry.rank, previousRank);
+            // Save today's snapshot
+            saveRankSnapshot(db, entry.id, 'global', entry.rank, entry.overall_xp);
+            return { ...entry, rankChange };
+        });
+
         let userRank = null;
+        let userRankChange = null;
         if (req.userId) {
-            userRank = db.prepare(`
-                SELECT rank FROM (
-                    SELECT id, ROW_NUMBER() OVER (ORDER BY overall_xp DESC) as rank
+            const userRankData = db.prepare(`
+                SELECT rank, overall_xp FROM (
+                    SELECT id, overall_xp, ROW_NUMBER() OVER (ORDER BY overall_xp DESC) as rank
                     FROM users WHERE is_guest = 0
                 )
                 WHERE id = ?
             `).get(req.userId);
+            userRank = userRankData?.rank;
+            if (userRank) {
+                const previousRank = getPreviousRank(db, req.userId, 'global');
+                userRankChange = calculateRankChange(userRank, previousRank);
+                // Save today's snapshot for current user
+                saveRankSnapshot(db, req.userId, 'global', userRank, userRankData?.overall_xp || 0);
+            }
         }
 
-        res.json({ leaderboard, userRank: userRank?.rank });
+        res.json({ leaderboard: leaderboardWithChanges, userRank, userRankChange });
     } catch (err) {
         next(err);
     }
