@@ -319,6 +319,46 @@ router.get('/sessions/:id', authenticate, (req, res, next) => {
 });
 
 /**
+ * Get population threshold for difficulty filtering.
+ * Easy = well-known countries (high population)
+ * Medium = mix of countries
+ * Hard = obscure countries (low population)
+ *
+ * @param {Database} db - Database instance
+ * @param {string} difficulty - Difficulty level (easy, medium, hard)
+ * @returns {object} Population filter criteria { minPop, maxPop, orderBy }
+ */
+function getDifficultyFilter(db, difficulty) {
+    // Get population statistics for thresholds
+    const stats = db.prepare(`
+        SELECT
+            MAX(population) as maxPop,
+            MIN(population) as minPop,
+            AVG(population) as avgPop
+        FROM countries WHERE population IS NOT NULL
+    `).get();
+
+    // Calculate thresholds based on average population
+    // Easy: countries with population above average (well-known)
+    // Hard: countries with population below average (less well-known)
+    // Medium: all countries mixed
+    const avgPop = stats.avgPop || 100000000;
+
+    switch (difficulty) {
+        case 'easy':
+            // Well-known countries - high population
+            return { minPop: avgPop, maxPop: null, orderBy: 'c.population DESC' };
+        case 'hard':
+            // Less well-known countries - lower population
+            return { minPop: null, maxPop: avgPop, orderBy: 'c.population ASC' };
+        case 'medium':
+        default:
+            // Mix - all countries, random order
+            return { minPop: null, maxPop: null, orderBy: 'RANDOM()' };
+    }
+}
+
+/**
  * Generate flag questions.
  *
  * @param {Database} db - Database instance
@@ -329,19 +369,32 @@ router.get('/sessions/:id', authenticate, (req, res, next) => {
  * @returns {Array} Array of questions
  */
 function generateFlagQuestions(db, mode, region, count, difficulty) {
+    const diffFilter = getDifficultyFilter(db, difficulty);
+
     let query = `
-        SELECT c.id, c.name, c.code, f.image_url
+        SELECT c.id, c.name, c.code, c.population, f.image_url
         FROM countries c
         JOIN flags f ON f.country_id = c.id
+        WHERE c.population IS NOT NULL
     `;
 
     const params = [];
     if (region) {
-        query += ' WHERE c.continent = ?';
+        query += ' AND c.continent = ?';
         params.push(region);
     }
 
-    query += ' ORDER BY RANDOM() LIMIT ?';
+    // Apply difficulty-based population filter
+    if (diffFilter.minPop !== null) {
+        query += ' AND c.population >= ?';
+        params.push(diffFilter.minPop);
+    }
+    if (diffFilter.maxPop !== null) {
+        query += ' AND c.population <= ?';
+        params.push(diffFilter.maxPop);
+    }
+
+    query += ` ORDER BY ${diffFilter.orderBy} LIMIT ?`;
     params.push(count);
 
     const countries = db.prepare(query).all(...params);
@@ -385,19 +438,32 @@ function generateFlagQuestions(db, mode, region, count, difficulty) {
  * @returns {Array} Array of questions
  */
 function generateCapitalQuestions(db, mode, region, count, difficulty) {
+    const diffFilter = getDifficultyFilter(db, difficulty);
+
     let query = `
-        SELECT c.id, c.name as country, cap.name as capital
+        SELECT c.id, c.name as country, c.population, cap.name as capital
         FROM countries c
         JOIN capitals cap ON cap.country_id = c.id
+        WHERE c.population IS NOT NULL
     `;
 
     const params = [];
     if (region) {
-        query += ' WHERE c.continent = ?';
+        query += ' AND c.continent = ?';
         params.push(region);
     }
 
-    query += ' ORDER BY RANDOM() LIMIT ?';
+    // Apply difficulty-based population filter
+    if (diffFilter.minPop !== null) {
+        query += ' AND c.population >= ?';
+        params.push(diffFilter.minPop);
+    }
+    if (diffFilter.maxPop !== null) {
+        query += ' AND c.population <= ?';
+        params.push(diffFilter.maxPop);
+    }
+
+    query += ` ORDER BY ${diffFilter.orderBy} LIMIT ?`;
     params.push(count);
 
     const data = db.prepare(query).all(...params);
@@ -441,15 +507,27 @@ function generateCapitalQuestions(db, mode, region, count, difficulty) {
  * @returns {Array} Array of questions
  */
 function generateMapQuestions(db, mode, region, count, difficulty) {
-    let query = 'SELECT id, name, code, continent FROM countries';
+    const diffFilter = getDifficultyFilter(db, difficulty);
+
+    let query = 'SELECT id, name, code, continent, population FROM countries WHERE population IS NOT NULL';
     const params = [];
 
     if (region) {
-        query += ' WHERE continent = ?';
+        query += ' AND continent = ?';
         params.push(region);
     }
 
-    query += ' ORDER BY RANDOM() LIMIT ?';
+    // Apply difficulty-based population filter
+    if (diffFilter.minPop !== null) {
+        query += ' AND population >= ?';
+        params.push(diffFilter.minPop);
+    }
+    if (diffFilter.maxPop !== null) {
+        query += ' AND population <= ?';
+        params.push(diffFilter.maxPop);
+    }
+
+    query += ` ORDER BY ${diffFilter.orderBy.replace('c.', '')} LIMIT ?`;
     params.push(count);
 
     const countries = db.prepare(query).all(...params);
@@ -493,6 +571,7 @@ function generateMapQuestions(db, mode, region, count, difficulty) {
  * @returns {Array} Array of questions
  */
 function generateLanguageQuestions(db, mode, region, count, difficulty) {
+    const diffFilter = getDifficultyFilter(db, difficulty);
     // Get all languages for generating wrong answers
     const allLanguages = db.prepare('SELECT id, name FROM languages').all();
 
@@ -500,19 +579,30 @@ function generateLanguageQuestions(db, mode, region, count, difficulty) {
         // Show a language, user picks which country speaks it
         let query = `
             SELECT DISTINCT l.id as lang_id, l.name as language,
-                   c.id as country_id, c.name as country, c.continent
+                   c.id as country_id, c.name as country, c.continent, c.population
             FROM languages l
             JOIN country_languages cl ON l.id = cl.language_id
             JOIN countries c ON cl.country_id = c.id
+            WHERE c.population IS NOT NULL
         `;
         const params = [];
 
         if (region) {
-            query += ' WHERE c.continent = ?';
+            query += ' AND c.continent = ?';
             params.push(region);
         }
 
-        query += ' ORDER BY RANDOM() LIMIT ?';
+        // Apply difficulty-based population filter
+        if (diffFilter.minPop !== null) {
+            query += ' AND c.population >= ?';
+            params.push(diffFilter.minPop);
+        }
+        if (diffFilter.maxPop !== null) {
+            query += ' AND c.population <= ?';
+            params.push(diffFilter.maxPop);
+        }
+
+        query += ` ORDER BY ${diffFilter.orderBy} LIMIT ?`;
         params.push(count);
 
         const data = db.prepare(query).all(...params);
@@ -543,7 +633,7 @@ function generateLanguageQuestions(db, mode, region, count, difficulty) {
     } else {
         // Default: country-to-languages - Show country, user picks the language
         let query = `
-            SELECT c.id as country_id, c.name as country, c.continent,
+            SELECT c.id as country_id, c.name as country, c.continent, c.population,
                    GROUP_CONCAT(l.name) as languages,
                    (SELECT l2.name FROM languages l2
                     JOIN country_languages cl2 ON l2.id = cl2.language_id
@@ -552,15 +642,26 @@ function generateLanguageQuestions(db, mode, region, count, difficulty) {
             FROM countries c
             JOIN country_languages cl ON c.id = cl.country_id
             JOIN languages l ON cl.language_id = l.id
+            WHERE c.population IS NOT NULL
         `;
         const params = [];
 
         if (region) {
-            query += ' WHERE c.continent = ?';
+            query += ' AND c.continent = ?';
             params.push(region);
         }
 
-        query += ' GROUP BY c.id ORDER BY RANDOM() LIMIT ?';
+        // Apply difficulty-based population filter
+        if (diffFilter.minPop !== null) {
+            query += ' AND c.population >= ?';
+            params.push(diffFilter.minPop);
+        }
+        if (diffFilter.maxPop !== null) {
+            query += ' AND c.population <= ?';
+            params.push(diffFilter.maxPop);
+        }
+
+        query += ` GROUP BY c.id ORDER BY ${diffFilter.orderBy} LIMIT ?`;
         params.push(count);
 
         const data = db.prepare(query).all(...params);

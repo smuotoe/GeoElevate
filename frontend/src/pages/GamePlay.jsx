@@ -6,9 +6,15 @@ import Breadcrumb from '../components/Breadcrumb'
 import Modal from '../components/Modal'
 import styles from './GamePlay.module.css'
 
-const QUESTION_TIME = 15
 const TOTAL_QUESTIONS = 10
 const FUZZY_THRESHOLD = 0.75 // 75% similarity required for fuzzy match
+
+// Time limits per difficulty level (in seconds)
+const DIFFICULTY_TIME = {
+    easy: 20,
+    medium: 15,
+    hard: 10
+}
 
 /**
  * Custom hook to track network connection status.
@@ -110,7 +116,7 @@ function GamePlay() {
     const [questionMode, setQuestionMode] = useState('') // game-specific direction mode
     const [questions, setQuestions] = useState([])
     const [currentIndex, setCurrentIndex] = useState(0)
-    const [timeLeft, setTimeLeft] = useState(QUESTION_TIME)
+    const [timeLeft, setTimeLeft] = useState(15) // Default, updated on game start
     const [score, setScore] = useState(0)
     const [streak, setStreak] = useState(0)
     const [answers, setAnswers] = useState([])
@@ -124,6 +130,8 @@ function GamePlay() {
     const [wasOffline, setWasOffline] = useState(false)
     const [regions, setRegions] = useState([])
     const [selectedRegion, setSelectedRegion] = useState('')
+    const [difficulty, setDifficulty] = useState('medium')
+    const questionTime = DIFFICULTY_TIME[difficulty] || 15
     const [gameStats, setGameStats] = useState({ xpEarned: 0, avgTimeMs: 0 })
     const [showReview, setShowReview] = useState(false)
     const [showShareDialog, setShowShareDialog] = useState(false)
@@ -162,6 +170,10 @@ function GamePlay() {
             setQuestionMode('flag-to-country')
         } else if (gameType === 'capitals' && !questionMode) {
             setQuestionMode('country-to-capital')
+        } else if (gameType === 'maps' && !questionMode) {
+            setQuestionMode('identify-highlighted')
+        } else if (gameType === 'languages' && !questionMode) {
+            setQuestionMode('country-to-languages')
         }
     }, [gameType, questionMode])
 
@@ -171,7 +183,8 @@ function GamePlay() {
             setError(null)
             const regionParam = selectedRegion ? `&region=${selectedRegion}` : ''
             const modeParam = questionMode ? `&mode=${questionMode}` : ''
-            const data = await api.get(`/games/questions?type=${gameType}&count=${TOTAL_QUESTIONS}${regionParam}${modeParam}`)
+            const difficultyParam = `&difficulty=${difficulty}`
+            const data = await api.get(`/games/questions?type=${gameType}&count=${TOTAL_QUESTIONS}${regionParam}${modeParam}${difficultyParam}`)
 
             if (!data.questions || data.questions.length === 0) {
                 setError('No questions available for this game type. Please try another game.')
@@ -195,12 +208,12 @@ function GamePlay() {
 
             setQuestions(data.questions)
             setGameState('playing')
-            setTimeLeft(QUESTION_TIME)
+            setTimeLeft(questionTime)
         } catch (err) {
             setError(err.message)
             setGameState('error')
         }
-    }, [gameType, user, selectedRegion, questionMode])
+    }, [gameType, user, selectedRegion, questionMode, difficulty, questionTime])
 
     // Start game with selected mode
     const startGame = (mode) => {
@@ -272,7 +285,7 @@ function GamePlay() {
             userAnswer: null,
             correctAnswer: currentQuestion.correctAnswer,
             isCorrect: false,
-            timeMs: QUESTION_TIME * 1000
+            timeMs: questionTime * 1000
         }
         const newAnswers = [...answers, newAnswer]
         setAnswers(newAnswers)
@@ -289,7 +302,7 @@ function GamePlay() {
         }
 
         const isCorrect = answer === currentQuestion.correctAnswer
-        const timeMs = (QUESTION_TIME - timeLeft) * 1000
+        const timeMs = (questionTime - timeLeft) * 1000
 
         setSelectedAnswer(answer)
         setShowResult(true)
@@ -330,7 +343,7 @@ function GamePlay() {
         }
 
         const isCorrect = isFuzzyMatch(typedAnswer, currentQuestion.correctAnswer)
-        const timeMs = (QUESTION_TIME - timeLeft) * 1000
+        const timeMs = (questionTime - timeLeft) * 1000
 
         setSelectedAnswer(typedAnswer)
         setShowResult(true)
@@ -408,7 +421,7 @@ function GamePlay() {
         setCurrentIndex(prev => prev + 1)
         setSelectedAnswer(null)
         setShowResult(false)
-        setTimeLeft(QUESTION_TIME)
+        setTimeLeft(questionTime)
     }
 
     const handlePause = () => {
@@ -548,7 +561,7 @@ function GamePlay() {
                         </button>
                     </div>
                 </div>
-                {(gameType === 'flags' || gameType === 'capitals') && (
+                {(gameType === 'flags' || gameType === 'capitals' || gameType === 'maps' || gameType === 'languages') && (
                     <div className="card" style={{ marginTop: '16px' }}>
                         <h3 style={{ marginBottom: '12px', color: 'var(--text-primary)' }}>
                             Question Direction
@@ -605,9 +618,97 @@ function GamePlay() {
                                     </button>
                                 </>
                             )}
+                            {gameType === 'maps' && (
+                                <>
+                                    <button
+                                        className={`btn ${questionMode === 'identify-highlighted' ? 'btn-primary' : 'btn-secondary'}`}
+                                        onClick={() => setQuestionMode('identify-highlighted')}
+                                        style={{ flex: 1, padding: '12px' }}
+                                    >
+                                        Identify Country
+                                        <span style={{ display: 'block', fontSize: '12px', opacity: 0.8, marginTop: '4px' }}>
+                                            See code, name country
+                                        </span>
+                                    </button>
+                                    <button
+                                        className={`btn ${questionMode === 'click-on-country' ? 'btn-primary' : 'btn-secondary'}`}
+                                        onClick={() => setQuestionMode('click-on-country')}
+                                        style={{ flex: 1, padding: '12px' }}
+                                    >
+                                        Find Country
+                                        <span style={{ display: 'block', fontSize: '12px', opacity: 0.8, marginTop: '4px' }}>
+                                            See name, pick code
+                                        </span>
+                                    </button>
+                                </>
+                            )}
+                            {gameType === 'languages' && (
+                                <>
+                                    <button
+                                        className={`btn ${questionMode === 'country-to-languages' ? 'btn-primary' : 'btn-secondary'}`}
+                                        onClick={() => setQuestionMode('country-to-languages')}
+                                        style={{ flex: 1, padding: '12px' }}
+                                    >
+                                        Country to Language
+                                        <span style={{ display: 'block', fontSize: '12px', opacity: 0.8, marginTop: '4px' }}>
+                                            See country, pick language
+                                        </span>
+                                    </button>
+                                    <button
+                                        className={`btn ${questionMode === 'language-to-countries' ? 'btn-primary' : 'btn-secondary'}`}
+                                        onClick={() => setQuestionMode('language-to-countries')}
+                                        style={{ flex: 1, padding: '12px' }}
+                                    >
+                                        Language to Country
+                                        <span style={{ display: 'block', fontSize: '12px', opacity: 0.8, marginTop: '4px' }}>
+                                            See language, pick country
+                                        </span>
+                                    </button>
+                                </>
+                            )}
                         </div>
                     </div>
                 )}
+                <div className="card" style={{ marginTop: '16px' }}>
+                    <h3 style={{ marginBottom: '12px', color: 'var(--text-primary)' }}>
+                        Difficulty Level
+                    </h3>
+                    <p className="text-secondary" style={{ marginBottom: '16px' }}>
+                        Choose how challenging you want the game to be
+                    </p>
+                    <div className={styles.modeButtons}>
+                        <button
+                            className={`btn ${difficulty === 'easy' ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => setDifficulty('easy')}
+                            style={{ flex: 1, padding: '12px' }}
+                        >
+                            Easy
+                            <span style={{ display: 'block', fontSize: '12px', opacity: 0.8, marginTop: '4px' }}>
+                                Well-known countries
+                            </span>
+                        </button>
+                        <button
+                            className={`btn ${difficulty === 'medium' ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => setDifficulty('medium')}
+                            style={{ flex: 1, padding: '12px' }}
+                        >
+                            Medium
+                            <span style={{ display: 'block', fontSize: '12px', opacity: 0.8, marginTop: '4px' }}>
+                                Mixed difficulty
+                            </span>
+                        </button>
+                        <button
+                            className={`btn ${difficulty === 'hard' ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => setDifficulty('hard')}
+                            style={{ flex: 1, padding: '12px' }}
+                        >
+                            Hard
+                            <span style={{ display: 'block', fontSize: '12px', opacity: 0.8, marginTop: '4px' }}>
+                                Less familiar countries
+                            </span>
+                        </button>
+                    </div>
+                </div>
                 <div className="card" style={{ marginTop: '16px' }}>
                     <h3 style={{ marginBottom: '12px', color: 'var(--text-primary)' }}>
                         Filter by Region
@@ -841,7 +942,7 @@ function GamePlay() {
             <div className={styles.timerBar}>
                 <div
                     className={styles.timerFill}
-                    style={{ width: `${(timeLeft / QUESTION_TIME) * 100}%` }}
+                    style={{ width: `${(timeLeft / questionTime) * 100}%` }}
                 />
             </div>
 
