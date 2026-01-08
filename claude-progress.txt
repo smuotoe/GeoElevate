@@ -1,5 +1,93 @@
 # GeoElevate - Progress Report
 
+## Session 20 Progress
+- **Date**: January 8, 2026
+- **Status**: 189/302 features passing (62.6%)
+- **Focus**: Multiplayer lobby, friend challenges
+
+### Features Completed This Session
+
+#### Feature #226: Multiplayer lobby shows waiting status
+- **Description**: Verify lobby waiting state displays correctly
+- **Implementation**:
+  - Enhanced `Multiplayer.jsx` with lobby functionality
+  - Added `useParams` to detect `/multiplayer/lobby/:matchId` route
+  - Added friends list with Challenge buttons
+  - Added lobby screen with waiting status, timer, and opponent info
+  - Polls match status every second to detect when opponent accepts
+- **Verification**:
+  - Send challenge: Clicked "Challenge" button next to friend
+  - Lobby screen: "Match Lobby" heading displays
+  - Waiting message: "Waiting for opponent..." and "Waiting for [name] to accept"
+  - Timer: Shows elapsed time counting up (0:01, 0:02, etc.)
+  - Game type indicator shows which game will be played
+- **Result**: Multiplayer lobby working correctly
+
+#### Feature #238: Add friend by username works
+- **Description**: Verify username friend adding
+- **Verification**:
+  - Clicked Add button, entered "testuser", sent request
+  - Friend request sent successfully
+  - testuser received and accepted request
+  - Both users now show each other in Friends list
+- **Result**: Friend adding by username working correctly
+
+#### Feature #239: Friend request pending state
+- **Description**: Verify pending requests display
+- **Verification**:
+  - After sending request, appeared in recipient's "Friend Requests" section
+  - Shows sender's username and level
+  - Accept/Decline buttons visible
+  - After accepting, moved to "My Friends" list
+- **Result**: Pending request state working correctly
+
+#### Feature #243: Friend challenge notification
+- **Description**: Verify challenge notifications
+- **Verification**:
+  - testuser sent challenge to srtest
+  - Notification appeared: "Match Invite - testuser challenged you to a flags match!"
+  - Multiplayer page shows pending invite with Accept/Decline buttons
+- **Result**: Challenge notifications working correctly
+
+### Code Changes This Session
+
+#### Frontend
+- `frontend/src/pages/Multiplayer.jsx`:
+  - Added `useParams`, `useNavigate`, `useCallback` imports
+  - Added `matchId` param handling for lobby route
+  - Added `friends`, `match`, `challengingFriendId`, `waitingTime` state
+  - Added `fetchMatch()` to get match details
+  - Added `loadData()` to load invites and friends
+  - Added `handleChallenge()` to send challenges
+  - Added lobby screen with waiting status, timer, opponent name
+  - Added friends list with Challenge buttons
+  - Auto-polling for match status updates
+
+### Features Skipped (Require Two-Player Testing)
+- #227: Multiplayer real-time sync
+- #228: Multiplayer 10 questions per match
+- #229: Multiplayer short time limit
+- #230: Multiplayer opponent answered indicator
+- #231-236: Various multiplayer gameplay features
+- #237: Friends online/offline status (not implemented)
+- #240-242: Activity feed and score notifications (not implemented)
+
+### Technical Notes
+- **Test users**:
+  - srtest@example.com / Test123! / srtest (ID 30)
+  - test@example.com / password123 / testuser (ID 1)
+- **Frontend**: http://localhost:5173
+- **Backend**: http://localhost:5002
+- **Friendship established**: srtest <-> testuser
+
+### What the Next Agent Should Do
+1. **Get next feature** - Use `feature_get_next` to continue implementation
+2. **Run regression tests** - Verify existing features still work
+3. **Consider implementing** online/offline status for friends
+4. **Consider implementing** activity feed for friend actions
+
+---
+
 ## Session 19 Progress
 - **Date**: January 8, 2026
 - **Status**: 185/302 features passing (61.3%)
