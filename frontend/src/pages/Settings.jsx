@@ -49,6 +49,14 @@ function Settings() {
     })
     const [privacySaving, setPrivacySaving] = useState(false)
 
+    // Email change state
+    const [showEmailForm, setShowEmailForm] = useState(false)
+    const [newEmail, setNewEmail] = useState('')
+    const [emailPassword, setEmailPassword] = useState('')
+    const [emailError, setEmailError] = useState('')
+    const [emailSuccess, setEmailSuccess] = useState('')
+    const [emailLoading, setEmailLoading] = useState(false)
+
     // Track unsaved changes in the password form
     const hasUnsavedChanges = showPasswordForm && (currentPassword || newPassword || confirmPassword)
     const { showDialog, confirmNavigation, cancelNavigation, message } = useUnsavedChanges(
@@ -145,6 +153,34 @@ function Settings() {
             console.error('Failed to save privacy setting:', err)
         } finally {
             setPrivacySaving(false)
+        }
+    }
+
+    /**
+     * Handle email change request.
+     *
+     * @param {Event} e - Form submit event
+     */
+    async function handleEmailChange(e) {
+        e.preventDefault()
+        setEmailError('')
+        setEmailSuccess('')
+        setEmailLoading(true)
+
+        try {
+            const response = await api.post('/auth/change-email', {
+                newEmail,
+                password: emailPassword
+            })
+
+            setEmailSuccess(response.message || 'Verification email sent to your new address.')
+            setShowEmailForm(false)
+            setNewEmail('')
+            setEmailPassword('')
+        } catch (err) {
+            setEmailError(err.message || 'Failed to change email')
+        } finally {
+            setEmailLoading(false)
         }
     }
 
@@ -438,13 +474,91 @@ function Settings() {
                     </div>
                 )}
 
-                {!showPasswordForm ? (
-                    <button
-                        className="btn btn-secondary"
-                        onClick={() => setShowPasswordForm(true)}
-                    >
-                        Change Password
-                    </button>
+                {emailSuccess && (
+                    <div className="toast success" style={{ position: 'relative', bottom: 'auto', left: 'auto', transform: 'none', marginBottom: '16px' }}>
+                        {emailSuccess}
+                    </div>
+                )}
+
+                <div style={{ marginBottom: '16px' }}>
+                    <p className="text-secondary" style={{ fontSize: '0.9rem', marginBottom: '8px' }}>
+                        Current email: <strong>{user?.email}</strong>
+                    </p>
+                </div>
+
+                {!showEmailForm && !showPasswordForm ? (
+                    <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                        <button
+                            className="btn btn-secondary"
+                            onClick={() => setShowEmailForm(true)}
+                        >
+                            Change Email
+                        </button>
+                        <button
+                            className="btn btn-secondary"
+                            onClick={() => setShowPasswordForm(true)}
+                        >
+                            Change Password
+                        </button>
+                    </div>
+                ) : showEmailForm ? (
+                    <form onSubmit={handleEmailChange}>
+                        <h4 style={{ marginBottom: '16px' }}>Change Email</h4>
+
+                        <div className="form-group">
+                            <label htmlFor="newEmail">New Email Address</label>
+                            <input
+                                type="email"
+                                id="newEmail"
+                                value={newEmail}
+                                onChange={(e) => setNewEmail(e.target.value)}
+                                placeholder="Enter new email address"
+                                required
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <label htmlFor="emailPassword">Current Password</label>
+                            <input
+                                type="password"
+                                id="emailPassword"
+                                value={emailPassword}
+                                onChange={(e) => setEmailPassword(e.target.value)}
+                                placeholder="Enter your password to confirm"
+                                required
+                            />
+                        </div>
+
+                        {emailError && (
+                            <div className="form-error" role="alert" aria-live="assertive">{emailError}</div>
+                        )}
+
+                        <p className="text-secondary" style={{ fontSize: '0.85rem', marginTop: '8px', marginBottom: '16px' }}>
+                            A verification link will be sent to your new email address. Your email will not change until you click the link.
+                        </p>
+
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                                type="submit"
+                                className="btn btn-primary"
+                                disabled={emailLoading}
+                            >
+                                {emailLoading ? 'Sending...' : 'Send Verification'}
+                            </button>
+                            <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => {
+                                    setShowEmailForm(false)
+                                    setEmailError('')
+                                    setNewEmail('')
+                                    setEmailPassword('')
+                                }}
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </form>
                 ) : (
                     <form onSubmit={handlePasswordChange}>
                         <div className="form-group">

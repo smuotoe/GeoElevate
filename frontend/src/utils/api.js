@@ -111,6 +111,14 @@ async function request(endpoint, options = {}, timeout = DEFAULT_TIMEOUT) {
     // Handle token expiration or invalid token (e.g., localStorage cleared)
     if (response.status === 401) {
         const data = await response.json()
+
+        // Check if this is a password validation error (not an auth issue)
+        const passwordErrors = ['Current password is incorrect', 'Invalid password', 'Wrong password']
+        if (data.error?.message && passwordErrors.some(msg => data.error.message.includes(msg))) {
+            // This is a password validation error, not an auth issue
+            throw new Error(data.error.message)
+        }
+
         if (data.error?.code === 'TOKEN_EXPIRED') {
             // Try to refresh token
             const refreshed = await refreshToken()

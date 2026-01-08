@@ -466,6 +466,148 @@ router.get('/verify-reset-token', (req, res, next) => {
 });
 
 /**
+ * Request email change.
+ * POST /api/auth/change-email
+ * Requires authentication. Generates a verification token for the new email.
+ */
+router.post('/change-email', authenticate, async (req, res, next) => {
+    try {
+        const { newEmail, password } = req.body;
+
+        if (!newEmail || !password) {
+            return res.status(400).json({
+                error: { message: 'New email and current password are required' }
+            });
+        }
+
+        // Validate email format
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(newEmail)) {
+            return res.status(400).json({
+                error: { message: 'Invalid email format' }
+            });
+        }
+
+        const db = getDb();
+
+        // Get current user
+        const user = db.prepare(
+            'SELECT id, email, password_hash FROM users WHERE id = ?'
+        ).get(req.userId);
+
+        if (!user) {
+            return res.status(404).json({
+                error: { message: 'User not found' }
+            });
+        }
+
+        // Verify current password
+        const isValidPassword = await bcrypt.compare(password, user.password_hash);
+        if (!isValidPassword) {
+            return res.status(401).json({
+                error: { message: 'Current password is incorrect' }
+            });
+        }
+
+        // Check if new email is same as current
+        if (newEmail.toLowerCase() === user.email.toLowerCase()) {
+            return res.status(400).json({
+                error: { message: 'New email must be different from current email' }
+            });
+        }
+
+        // Check if new email is already in use
+        const existingEmail = db.prepare(
+            'SELECT id FROM users WHERE email = ? AND id != ?'
+        ).get(newEmail.toLowerCase(), req.userId);
+
+        if (existingEmail) {
+            return res.status(409).json({
+                error: { message: 'Email address is already in use' }
+            });
+        }
+
+        // Generate verification token
+        const verificationToken = uuidv4();
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+        // Create email_change_tokens table entry if needed (store pending email change)
+        // For simplicity, we'll use a pending_email field approach
+        db.prepare(`
+            UPDATE users
+            SET pending_email = ?, pending_email_token = ?, pending_email_expires = ?
+            WHERE id = ?
+        `).run(newEmail.toLowerCase(), verificationToken, expiresAt.toISOString(), req.userId);
+
+        // Log verification link to console (development mode)
+        const verificationLink = `http://localhost:5173/verify-email?token=${verificationToken}`;
+        console.log('='.repeat(60));
+        console.log('EMAIL CHANGE VERIFICATION LINK (Development Mode)');
+        console.log(`Current Email: ${user.email}`);
+        console.log(`New Email: ${newEmail.toLowerCase()}`);
+        console.log(`Link: ${verificationLink}`);
+        console.log(`Expires: ${expiresAt.toISOString()}`);
+        console.log('='.repeat(60));
+
+        res.json({
+            message: 'Verification email sent. Please check your new email address to confirm the change.',
+            pendingEmail: newEmail.toLowerCase()
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/**
+ * Verify email change.
+ * POST /api/auth/verify-email-change
+ * Confirms an email change with the verification token.
+ */
+router.post('/verify-email-change', (req, res, next) => {
+    try {
+        const { token } = req.body;
+
+        if (!token) {
+            return res.status(400).json({
+                error: { message: 'Verification token is required' }
+            });
+        }
+
+        const db = getDb();
+
+        // Find user with matching pending email token
+        const user = db.prepare(`
+            SELECT id, email, pending_email, pending_email_token, pending_email_expires
+            FROM users
+            WHERE pending_email_token = ?
+            AND pending_email_expires > datetime('now')
+        `).get(token);
+
+        if (!user || !user.pending_email) {
+            return res.status(400).json({
+                error: { message: 'Invalid or expired verification token' }
+            });
+        }
+
+        // Update email and clear pending fields
+        db.prepare(`
+            UPDATE users
+            SET email = ?, pending_email = NULL, pending_email_token = NULL, pending_email_expires = NULL, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        `).run(user.pending_email, user.id);
+
+        console.log(`Email changed successfully: ${user.email} -> ${user.pending_email}`);
+
+        res.json({
+            message: 'Email changed successfully',
+            newEmail: user.pending_email
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/**
  * Generate access token.
  *
  * @param {number} userId - The user ID

@@ -595,6 +595,15 @@ function createTables() {
         )
     `);
 
+    // Add pending_email columns for email change verification (migration)
+    try {
+        db.run('ALTER TABLE users ADD COLUMN pending_email TEXT');
+        db.run('ALTER TABLE users ADD COLUMN pending_email_token TEXT');
+        db.run('ALTER TABLE users ADD COLUMN pending_email_expires DATETIME');
+    } catch (e) {
+        // Columns may already exist, ignore error
+    }
+
     // Create indexes for performance
     db.run('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)');
     db.run('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)');
