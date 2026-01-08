@@ -41,6 +41,14 @@ function Settings() {
     })
     const [notificationSaving, setNotificationSaving] = useState(false)
 
+    // Privacy settings
+    const [privacySettings, setPrivacySettings] = useState({
+        profileVisible: true,
+        showOnLeaderboards: true,
+        allowFriendRequests: true
+    })
+    const [privacySaving, setPrivacySaving] = useState(false)
+
     // Track unsaved changes in the password form
     const hasUnsavedChanges = showPasswordForm && (currentPassword || newPassword || confirmPassword)
     const { showDialog, confirmNavigation, cancelNavigation, message } = useUnsavedChanges(
@@ -64,6 +72,16 @@ function Settings() {
             setNotificationPrefs(prev => ({
                 ...prev,
                 ...user.settings.notifications
+            }))
+        }
+    }, [user])
+
+    // Load privacy settings from user settings
+    useEffect(() => {
+        if (user?.settings?.privacy) {
+            setPrivacySettings(prev => ({
+                ...prev,
+                ...user.settings.privacy
             }))
         }
     }, [user])
@@ -99,6 +117,36 @@ function Settings() {
         }
     }
 
+    /**
+     * Toggle a privacy setting.
+     *
+     * @param {string} key - The setting key to toggle
+     */
+    async function togglePrivacySetting(key) {
+        const newValue = !privacySettings[key]
+        const newSettings = { ...privacySettings, [key]: newValue }
+        setPrivacySettings(newSettings)
+        setPrivacySaving(true)
+
+        try {
+            await api.patch('/settings', { privacy: newSettings })
+            if (updateUser && user) {
+                updateUser({
+                    ...user,
+                    settings: {
+                        ...user.settings,
+                        privacy: newSettings
+                    }
+                })
+            }
+        } catch (err) {
+            // Revert on error
+            setPrivacySettings(prev => ({ ...prev, [key]: !newValue }))
+            console.error('Failed to save privacy setting:', err)
+        } finally {
+            setPrivacySaving(false)
+        }
+    }
 
     /**
      * Handle logout.
@@ -467,7 +515,54 @@ function Settings() {
 
             <section className="card mb-md">
                 <h3 className="mb-md">Privacy & Data</h3>
-                <p className="text-secondary mb-md">Export your data or delete your account.</p>
+                <p className="text-secondary mb-md">Control your profile visibility and data.</p>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <div>
+                        <span>Public Profile</span>
+                        <p className="text-secondary" style={{ fontSize: '0.8rem', margin: 0 }}>Allow others to view your profile</p>
+                    </div>
+                    <button
+                        className={`btn ${privacySettings.profileVisible ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => togglePrivacySetting('profileVisible')}
+                        disabled={privacySaving}
+                        style={{ minWidth: '60px' }}
+                    >
+                        {privacySettings.profileVisible ? 'On' : 'Off'}
+                    </button>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <div>
+                        <span>Show on Leaderboards</span>
+                        <p className="text-secondary" style={{ fontSize: '0.8rem', margin: 0 }}>Appear on public leaderboards</p>
+                    </div>
+                    <button
+                        className={`btn ${privacySettings.showOnLeaderboards ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => togglePrivacySetting('showOnLeaderboards')}
+                        disabled={privacySaving}
+                        style={{ minWidth: '60px' }}
+                    >
+                        {privacySettings.showOnLeaderboards ? 'On' : 'Off'}
+                    </button>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                    <div>
+                        <span>Allow Friend Requests</span>
+                        <p className="text-secondary" style={{ fontSize: '0.8rem', margin: 0 }}>Let others send you friend requests</p>
+                    </div>
+                    <button
+                        className={`btn ${privacySettings.allowFriendRequests ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => togglePrivacySetting('allowFriendRequests')}
+                        disabled={privacySaving}
+                        style={{ minWidth: '60px' }}
+                    >
+                        {privacySettings.allowFriendRequests ? 'On' : 'Off'}
+                    </button>
+                </div>
+
+                <h4 style={{ marginBottom: '12px', color: 'var(--text-primary)' }}>Data Management</h4>
 
                 {exportError && (
                     <div className="form-error mb-md" role="alert" aria-live="assertive">{exportError}</div>
