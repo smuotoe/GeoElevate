@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../utils/api'
 
@@ -60,6 +61,7 @@ function getNotificationIcon(type) {
  */
 function Notifications() {
     const { user } = useAuth()
+    const navigate = useNavigate()
     const [notifications, setNotifications] = useState([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
@@ -109,6 +111,47 @@ function Notifications() {
      */
     const toggleSortOrder = () => {
         setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')
+    }
+
+    /**
+     * Get navigation target based on notification type and data.
+     *
+     * @param {object} notification - Notification object
+     * @returns {string|null} Navigation path or null if no navigation
+     */
+    const getNavigationTarget = (notification) => {
+        switch (notification.type) {
+            case 'friend_request':
+                return '/friends'
+            case 'friend_accepted':
+                return '/friends'
+            case 'match_invite':
+                return '/multiplayer'
+            case 'challenge_complete':
+                return '/multiplayer'
+            case 'achievement':
+                return '/achievements'
+            default:
+                return null
+        }
+    }
+
+    /**
+     * Handle notification click - mark as read and navigate if applicable.
+     *
+     * @param {object} notification - Notification object
+     */
+    const handleNotificationClick = async (notification) => {
+        // Mark as read first
+        if (!notification.is_read) {
+            await markAsRead(notification.id)
+        }
+
+        // Navigate to relevant screen
+        const target = getNavigationTarget(notification)
+        if (target) {
+            navigate(target)
+        }
     }
 
     /**
@@ -335,9 +378,9 @@ function Notifications() {
                                 padding: '16px',
                                 opacity: notification.is_read ? 0.7 : 1,
                                 borderLeft: notification.is_read ? 'none' : '3px solid var(--primary)',
-                                cursor: notification.is_read ? 'default' : 'pointer'
+                                cursor: getNavigationTarget(notification) ? 'pointer' : 'default'
                             }}
-                            onClick={() => !notification.is_read && markAsRead(notification.id)}
+                            onClick={() => handleNotificationClick(notification)}
                         >
                             <div style={{
                                 display: 'flex',
