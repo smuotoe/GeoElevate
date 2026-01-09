@@ -1,191 +1,138 @@
-import initSqlJs from 'sql.js';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import pg from 'pg';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const { Pool } = pg;
 
-let db = null;
-let dbPath = null;
+let pool = null;
 
 /**
- * Initialize the SQLite database and create all required tables.
- *
- * @returns {Promise<object>} The initialized database instance
- */
-export async function initDatabase() {
-    dbPath = process.env.DATABASE_PATH || path.join(__dirname, '../../data/geoelevate.db');
-    console.log('Database path:', dbPath);
-    console.log('DATABASE_PATH env:', process.env.DATABASE_PATH);
-
-    // Ensure data directory exists
-    const dataDir = path.dirname(dbPath);
-    if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, { recursive: true });
-    }
-
-    const SQL = await initSqlJs();
-
-    // Load existing database or create new one
-    if (fs.existsSync(dbPath)) {
-        const fileBuffer = fs.readFileSync(dbPath);
-        db = new SQL.Database(fileBuffer);
-    } else {
-        db = new SQL.Database();
-    }
-
-    // Enable foreign keys
-    db.run('PRAGMA foreign_keys = ON');
-
-    // Create tables
-    createTables();
-
-    // Save initial database
-    saveDatabase();
-
-    console.log('Database initialized successfully');
-    return db;
-}
-
-/**
- * Save database to file.
- */
-export function saveDatabase() {
-    if (db && dbPath) {
-        const data = db.export();
-        const buffer = Buffer.from(data);
-        fs.writeFileSync(dbPath, buffer);
-    }
-}
-
-/**
- * Get the database instance.
- *
- * @returns {object} The database instance
- * @throws {Error} If database is not initialized
- */
-export function getDb() {
-    if (!db) {
-        throw new Error('Database not initialized. Call initDatabase() first.');
-    }
-    return createDbWrapper(db);
-}
-
-/**
- * Reload the database from disk.
+ * Initialize the PostgreSQL database connection and create all required tables.
  *
  * @returns {Promise<void>}
  */
-export async function reloadDatabase() {
-    if (dbPath && fs.existsSync(dbPath)) {
-        const SQL = await initSqlJs();
-        const fileBuffer = fs.readFileSync(dbPath);
-        db = new SQL.Database(fileBuffer);
-        db.run('PRAGMA foreign_keys = ON');
-        console.log('Database reloaded from disk');
+export async function initDatabase() {
+    const connectionString = process.env.DATABASE_URL;
+
+    if (!connectionString) {
+        throw new Error('DATABASE_URL environment variable is required');
     }
+
+    pool = new Pool({
+        connectionString,
+        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    });
+
+    // Test connection
+    const client = await pool.connect();
+    try {
+        await client.query('SELECT NOW()');
+        console.log('Database connected successfully');
+
+        // Create tables
+        await createTables(client);
+        console.log('Database initialized successfully');
+    } finally {
+        client.release();
+    }
+
+    return pool;
 }
 
-// Track if we're in a transaction (don't save until commit)
-let inTransaction = false;
+/**
+ * Get the database pool instance.
+ *
+ * @returns {object} Database wrapper with prepare method for compatibility
+ * @throws {Error} If database is not initialized
+ */
+export function getDb() {
+    if (!pool) {
+        throw new Error('Database not initialized. Call initDatabase() first.');
+    }
+    return createDbWrapper(pool);
+}
 
 /**
- * Create a wrapper around sql.js database to provide better-sqlite3 compatible API.
+ * Create a wrapper around pg pool to provide better-sqlite3 compatible API.
  *
- * @param {object} database - The sql.js database instance
+ * @param {Pool} database - The pg Pool instance
  * @returns {object} Wrapped database with prepare method
  */
 function createDbWrapper(database) {
     return {
         /**
          * Begin a database transaction.
-         * All changes will be batched until commit or rollback.
+         *
+         * @returns {Promise<pg.PoolClient>} Client with active transaction
          */
-        beginTransaction() {
-            if (inTransaction) {
-                throw new Error('Transaction already in progress');
-            }
-            database.run('BEGIN TRANSACTION');
-            inTransaction = true;
+        async beginTransaction() {
+            const client = await database.connect();
+            await client.query('BEGIN');
+            return client;
         },
 
         /**
-         * Commit the current transaction and save to disk.
+         * Commit a transaction.
+         *
+         * @param {pg.PoolClient} client - Client with active transaction
          */
-        commit() {
-            if (!inTransaction) {
-                throw new Error('No transaction in progress');
-            }
-            database.run('COMMIT');
-            inTransaction = false;
-            saveDatabase();
+        async commit(client) {
+            await client.query('COMMIT');
+            client.release();
         },
 
         /**
-         * Rollback the current transaction, discarding all changes.
+         * Rollback a transaction.
+         *
+         * @param {pg.PoolClient} client - Client with active transaction
          */
-        rollback() {
-            if (!inTransaction) {
-                throw new Error('No transaction in progress');
-            }
-            database.run('ROLLBACK');
-            inTransaction = false;
+        async rollback(client) {
+            await client.query('ROLLBACK');
+            client.release();
         },
 
         /**
          * Execute a function within a transaction.
-         * Automatically commits on success, rolls back on error.
          *
-         * @param {Function} fn - Function to execute within transaction
-         * @returns {*} Result of the function
+         * @param {Function} fn - Async function to execute within transaction
+         * @returns {Promise<*>} Result of the function
          */
-        transaction(fn) {
-            return (...args) => {
-                this.beginTransaction();
-                try {
-                    const result = fn(...args);
-                    this.commit();
-                    return result;
-                } catch (err) {
-                    this.rollback();
-                    throw err;
-                }
-            };
+        async transaction(fn) {
+            const client = await database.connect();
+            try {
+                await client.query('BEGIN');
+                const result = await fn(createClientWrapper(client));
+                await client.query('COMMIT');
+                return result;
+            } catch (err) {
+                await client.query('ROLLBACK');
+                throw err;
+            } finally {
+                client.release();
+            }
         },
 
         /**
-         * Prepare a SQL statement.
+         * Prepare a SQL statement (compatibility layer).
+         * Converts ? placeholders to $1, $2, etc.
          *
-         * @param {string} sql - SQL query string
+         * @param {string} sql - SQL query string with ? placeholders
          * @returns {object} Statement object with get, all, run methods
          */
         prepare(sql) {
+            const pgSql = convertPlaceholders(sql);
+
             return {
                 /**
                  * Execute query and return first row.
                  *
                  * @param {...*} params - Query parameters
-                 * @returns {object|undefined} First result row or undefined
+                 * @returns {Promise<object|undefined>} First result row or undefined
                  */
-                get(...params) {
+                async get(...params) {
                     try {
-                        const stmt = database.prepare(sql);
-                        stmt.bind(params);
-                        if (stmt.step()) {
-                            const columns = stmt.getColumnNames();
-                            const values = stmt.get();
-                            stmt.free();
-                            const row = {};
-                            columns.forEach((col, i) => {
-                                row[col] = values[i];
-                            });
-                            return row;
-                        }
-                        stmt.free();
-                        return undefined;
+                        const result = await database.query(pgSql, params);
+                        return result.rows[0];
                     } catch (err) {
-                        console.error('Database error in get:', err.message, 'SQL:', sql);
+                        console.error('Database error in get:', err.message, 'SQL:', pgSql);
                         throw err;
                     }
                 },
@@ -194,26 +141,14 @@ function createDbWrapper(database) {
                  * Execute query and return all rows.
                  *
                  * @param {...*} params - Query parameters
-                 * @returns {Array<object>} All result rows
+                 * @returns {Promise<Array<object>>} All result rows
                  */
-                all(...params) {
+                async all(...params) {
                     try {
-                        const stmt = database.prepare(sql);
-                        stmt.bind(params);
-                        const results = [];
-                        const columns = stmt.getColumnNames();
-                        while (stmt.step()) {
-                            const values = stmt.get();
-                            const row = {};
-                            columns.forEach((col, i) => {
-                                row[col] = values[i];
-                            });
-                            results.push(row);
-                        }
-                        stmt.free();
-                        return results;
+                        const result = await database.query(pgSql, params);
+                        return result.rows;
                     } catch (err) {
-                        console.error('Database error in all:', err.message, 'SQL:', sql);
+                        console.error('Database error in all:', err.message, 'SQL:', pgSql);
                         throw err;
                     }
                 },
@@ -222,24 +157,24 @@ function createDbWrapper(database) {
                  * Execute query (INSERT, UPDATE, DELETE).
                  *
                  * @param {...*} params - Query parameters
-                 * @returns {object} Result with changes and lastInsertRowid
+                 * @returns {Promise<object>} Result with changes and lastInsertRowid
                  */
-                run(...params) {
+                async run(...params) {
                     try {
-                        database.run(sql, params);
-                        const changes = database.getRowsModified();
-                        // Get last insert id
-                        const lastIdResult = database.exec('SELECT last_insert_rowid() as id');
-                        const lastInsertRowid = lastIdResult.length > 0
-                            ? lastIdResult[0].values[0][0]
-                            : 0;
-                        // Only save to disk if not in a transaction
-                        if (!inTransaction) {
-                            saveDatabase();
+                        // For INSERT statements, try to get the returning id
+                        let execSql = pgSql;
+                        const isInsert = pgSql.trim().toUpperCase().startsWith('INSERT');
+                        if (isInsert && !pgSql.toUpperCase().includes('RETURNING')) {
+                            execSql = pgSql.replace(/;?\s*$/, ' RETURNING id');
                         }
-                        return { changes, lastInsertRowid };
+
+                        const result = await database.query(execSql, params);
+                        return {
+                            changes: result.rowCount,
+                            lastInsertRowid: result.rows[0]?.id || 0
+                        };
                     } catch (err) {
-                        console.error('Database error in run:', err.message, 'SQL:', sql);
+                        console.error('Database error in run:', err.message, 'SQL:', pgSql);
                         throw err;
                     }
                 }
@@ -250,48 +185,99 @@ function createDbWrapper(database) {
          * Execute raw SQL.
          *
          * @param {string} sql - SQL to execute
+         * @returns {Promise<void>}
          */
-        exec(sql) {
-            database.run(sql);
-            // Only save to disk if not in a transaction
-            if (!inTransaction) {
-                saveDatabase();
-            }
+        async exec(sql) {
+            await database.query(sql);
         }
     };
 }
 
 /**
- * Create all database tables.
+ * Create a wrapper for a transaction client.
+ *
+ * @param {pg.PoolClient} client - Transaction client
+ * @returns {object} Wrapped client with prepare method
  */
-function createTables() {
+function createClientWrapper(client) {
+    return {
+        prepare(sql) {
+            const pgSql = convertPlaceholders(sql);
+
+            return {
+                async get(...params) {
+                    const result = await client.query(pgSql, params);
+                    return result.rows[0];
+                },
+                async all(...params) {
+                    const result = await client.query(pgSql, params);
+                    return result.rows;
+                },
+                async run(...params) {
+                    let execSql = pgSql;
+                    const isInsert = pgSql.trim().toUpperCase().startsWith('INSERT');
+                    if (isInsert && !pgSql.toUpperCase().includes('RETURNING')) {
+                        execSql = pgSql.replace(/;?\s*$/, ' RETURNING id');
+                    }
+                    const result = await client.query(execSql, params);
+                    return {
+                        changes: result.rowCount,
+                        lastInsertRowid: result.rows[0]?.id || 0
+                    };
+                }
+            };
+        }
+    };
+}
+
+/**
+ * Convert ? placeholders to PostgreSQL $1, $2, etc.
+ *
+ * @param {string} sql - SQL with ? placeholders
+ * @returns {string} SQL with $n placeholders
+ */
+function convertPlaceholders(sql) {
+    let index = 0;
+    return sql.replace(/\?/g, () => `$${++index}`);
+}
+
+/**
+ * Create all database tables.
+ *
+ * @param {pg.PoolClient} client - Database client
+ */
+async function createTables(client) {
     // Users table
-    db.run(`
+    await client.query(`
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             email TEXT UNIQUE,
             username TEXT UNIQUE NOT NULL,
             password_hash TEXT,
             avatar_url TEXT DEFAULT '/avatars/default.png',
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            last_login_at DATETIME,
-            is_guest INTEGER DEFAULT 0,
-            email_verified INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_login_at TIMESTAMP,
+            is_guest BOOLEAN DEFAULT FALSE,
+            email_verified BOOLEAN DEFAULT FALSE,
             overall_xp INTEGER DEFAULT 0,
             overall_level INTEGER DEFAULT 1,
             current_streak INTEGER DEFAULT 0,
             longest_streak INTEGER DEFAULT 0,
             last_played_date DATE,
-            settings_json TEXT DEFAULT '{}'
+            settings_json TEXT DEFAULT '{}',
+            pending_email TEXT,
+            pending_email_token TEXT,
+            pending_email_expires TIMESTAMP,
+            last_active_at TIMESTAMP
         )
     `);
 
     // User category stats table
-    db.run(`
+    await client.query(`
         CREATE TABLE IF NOT EXISTS user_category_stats (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             category TEXT NOT NULL CHECK(category IN ('flags', 'capitals', 'maps', 'languages', 'trivia')),
             xp INTEGER DEFAULT 0,
             level INTEGER DEFAULT 1,
@@ -300,38 +286,36 @@ function createTables() {
             total_questions INTEGER DEFAULT 0,
             high_score INTEGER DEFAULT 0,
             average_time_ms INTEGER DEFAULT 0,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(user_id, category)
         )
     `);
 
     // User fact progress (for spaced repetition)
-    db.run(`
+    await client.query(`
         CREATE TABLE IF NOT EXISTS user_fact_progress (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             fact_type TEXT NOT NULL,
             fact_id INTEGER NOT NULL,
             times_seen INTEGER DEFAULT 0,
             times_correct INTEGER DEFAULT 0,
             times_wrong INTEGER DEFAULT 0,
-            last_seen_at DATETIME,
-            next_review_at DATETIME,
+            last_seen_at TIMESTAMP,
+            next_review_at TIMESTAMP,
             ease_factor REAL DEFAULT 2.5,
             interval_days INTEGER DEFAULT 1,
             mastery_level INTEGER DEFAULT 0,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
             UNIQUE(user_id, fact_type, fact_id)
         )
     `);
 
     // Game sessions table
-    db.run(`
+    await client.query(`
         CREATE TABLE IF NOT EXISTS game_sessions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             game_type TEXT NOT NULL,
             game_mode TEXT DEFAULT 'solo',
             score INTEGER DEFAULT 0,
@@ -339,101 +323,90 @@ function createTables() {
             correct_count INTEGER DEFAULT 0,
             total_questions INTEGER DEFAULT 10,
             average_time_ms INTEGER DEFAULT 0,
-            started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            completed_at DATETIME,
+            started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP,
             difficulty_level TEXT DEFAULT 'medium',
             region_filter TEXT,
-            is_offline_sync INTEGER DEFAULT 0,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            is_offline_sync BOOLEAN DEFAULT FALSE
         )
     `);
 
     // Game answers table
-    db.run(`
+    await client.query(`
         CREATE TABLE IF NOT EXISTS game_answers (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id INTEGER NOT NULL,
+            id SERIAL PRIMARY KEY,
+            session_id INTEGER NOT NULL REFERENCES game_sessions(id) ON DELETE CASCADE,
             question_index INTEGER NOT NULL,
             question_data_json TEXT NOT NULL,
             user_answer TEXT,
             correct_answer TEXT NOT NULL,
-            is_correct INTEGER DEFAULT 0,
-            time_ms INTEGER DEFAULT 0,
-            FOREIGN KEY (session_id) REFERENCES game_sessions(id) ON DELETE CASCADE
+            is_correct BOOLEAN DEFAULT FALSE,
+            time_ms INTEGER DEFAULT 0
         )
     `);
 
     // Multiplayer matches table
-    db.run(`
+    await client.query(`
         CREATE TABLE IF NOT EXISTS multiplayer_matches (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            challenger_id INTEGER NOT NULL,
-            opponent_id INTEGER NOT NULL,
+            id SERIAL PRIMARY KEY,
+            challenger_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            opponent_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             game_type TEXT NOT NULL,
             status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'active', 'completed', 'cancelled')),
             challenger_score INTEGER DEFAULT 0,
             opponent_score INTEGER DEFAULT 0,
-            winner_id INTEGER,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            started_at DATETIME,
-            completed_at DATETIME,
-            FOREIGN KEY (challenger_id) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY (opponent_id) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY (winner_id) REFERENCES users(id) ON DELETE SET NULL
+            winner_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            started_at TIMESTAMP,
+            completed_at TIMESTAMP
         )
     `);
 
     // Multiplayer answers table
-    db.run(`
+    await client.query(`
         CREATE TABLE IF NOT EXISTS multiplayer_answers (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            match_id INTEGER NOT NULL,
-            user_id INTEGER NOT NULL,
+            id SERIAL PRIMARY KEY,
+            match_id INTEGER NOT NULL REFERENCES multiplayer_matches(id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             question_index INTEGER NOT NULL,
             question_data_json TEXT NOT NULL,
             user_answer TEXT,
             correct_answer TEXT NOT NULL,
-            is_correct INTEGER DEFAULT 0,
+            is_correct BOOLEAN DEFAULT FALSE,
             time_ms INTEGER DEFAULT 0,
-            answered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (match_id) REFERENCES multiplayer_matches(id) ON DELETE CASCADE,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            answered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     `);
 
     // Friendships table
-    db.run(`
+    await client.query(`
         CREATE TABLE IF NOT EXISTS friendships (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            friend_id INTEGER NOT NULL,
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            friend_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'accepted', 'blocked')),
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            accepted_at DATETIME,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY (friend_id) REFERENCES users(id) ON DELETE CASCADE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            accepted_at TIMESTAMP,
             UNIQUE(user_id, friend_id)
         )
     `);
 
     // Activity feed table
-    db.run(`
+    await client.query(`
         CREATE TABLE IF NOT EXISTS activity_feed (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             activity_type TEXT NOT NULL,
-            target_user_id INTEGER,
+            target_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
             data_json TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY (target_user_id) REFERENCES users(id) ON DELETE SET NULL
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     `);
 
     // Achievements table
-    db.run(`
+    await client.query(`
         CREATE TABLE IF NOT EXISTS achievements (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             name TEXT NOT NULL UNIQUE,
             description TEXT NOT NULL,
             icon TEXT DEFAULT 'trophy',
@@ -445,70 +418,64 @@ function createTables() {
     `);
 
     // User achievements table
-    db.run(`
+    await client.query(`
         CREATE TABLE IF NOT EXISTS user_achievements (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            achievement_id INTEGER NOT NULL,
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            achievement_id INTEGER NOT NULL REFERENCES achievements(id) ON DELETE CASCADE,
             progress INTEGER DEFAULT 0,
-            unlocked_at DATETIME,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY (achievement_id) REFERENCES achievements(id) ON DELETE CASCADE,
+            unlocked_at TIMESTAMP,
             UNIQUE(user_id, achievement_id)
         )
     `);
 
     // Daily challenges table
-    db.run(`
+    await client.query(`
         CREATE TABLE IF NOT EXISTS daily_challenges (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             date DATE NOT NULL,
             challenge_type TEXT NOT NULL,
             target_value INTEGER NOT NULL,
             current_value INTEGER DEFAULT 0,
-            is_completed INTEGER DEFAULT 0,
+            is_completed BOOLEAN DEFAULT FALSE,
             xp_reward INTEGER DEFAULT 50,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
             UNIQUE(user_id, date, challenge_type)
         )
     `);
 
     // Notifications table
-    db.run(`
+    await client.query(`
         CREATE TABLE IF NOT EXISTS notifications (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             type TEXT NOT NULL,
             title TEXT NOT NULL,
             body TEXT,
             data_json TEXT,
-            is_read INTEGER DEFAULT 0,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            is_read BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     `);
 
     // Leaderboard snapshots table
-    db.run(`
+    await client.query(`
         CREATE TABLE IF NOT EXISTS leaderboard_snapshots (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             leaderboard_type TEXT NOT NULL,
-            user_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             score INTEGER NOT NULL,
             rank INTEGER NOT NULL,
             period_start DATE,
             period_end DATE,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     `);
 
-    // Geography data tables
     // Countries table
-    db.run(`
+    await client.query(`
         CREATE TABLE IF NOT EXISTS countries (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             name TEXT NOT NULL UNIQUE,
             code TEXT NOT NULL UNIQUE,
             continent TEXT NOT NULL,
@@ -519,49 +486,45 @@ function createTables() {
     `);
 
     // Capitals table
-    db.run(`
+    await client.query(`
         CREATE TABLE IF NOT EXISTS capitals (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             name TEXT NOT NULL,
-            country_id INTEGER NOT NULL,
-            FOREIGN KEY (country_id) REFERENCES countries(id) ON DELETE CASCADE
+            country_id INTEGER NOT NULL REFERENCES countries(id) ON DELETE CASCADE
         )
     `);
 
     // Flags table
-    db.run(`
+    await client.query(`
         CREATE TABLE IF NOT EXISTS flags (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            country_id INTEGER NOT NULL UNIQUE,
-            image_url TEXT NOT NULL,
-            FOREIGN KEY (country_id) REFERENCES countries(id) ON DELETE CASCADE
+            id SERIAL PRIMARY KEY,
+            country_id INTEGER NOT NULL UNIQUE REFERENCES countries(id) ON DELETE CASCADE,
+            image_url TEXT NOT NULL
         )
     `);
 
     // Languages table
-    db.run(`
+    await client.query(`
         CREATE TABLE IF NOT EXISTS languages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             name TEXT NOT NULL UNIQUE
         )
     `);
 
     // Country-Languages junction table
-    db.run(`
+    await client.query(`
         CREATE TABLE IF NOT EXISTS country_languages (
-            country_id INTEGER NOT NULL,
-            language_id INTEGER NOT NULL,
-            is_official INTEGER DEFAULT 1,
-            PRIMARY KEY (country_id, language_id),
-            FOREIGN KEY (country_id) REFERENCES countries(id) ON DELETE CASCADE,
-            FOREIGN KEY (language_id) REFERENCES languages(id) ON DELETE CASCADE
+            country_id INTEGER NOT NULL REFERENCES countries(id) ON DELETE CASCADE,
+            language_id INTEGER NOT NULL REFERENCES languages(id) ON DELETE CASCADE,
+            is_official BOOLEAN DEFAULT TRUE,
+            PRIMARY KEY (country_id, language_id)
         )
     `);
 
     // Trivia facts table
-    db.run(`
+    await client.query(`
         CREATE TABLE IF NOT EXISTS trivia_facts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             category TEXT NOT NULL,
             question TEXT NOT NULL,
             answer TEXT NOT NULL,
@@ -570,59 +533,53 @@ function createTables() {
         )
     `);
 
-    // Refresh tokens table (for JWT refresh token management)
-    db.run(`
+    // Refresh tokens table
+    await client.query(`
         CREATE TABLE IF NOT EXISTS refresh_tokens (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             token TEXT NOT NULL UNIQUE,
-            expires_at DATETIME NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            expires_at TIMESTAMP NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     `);
 
     // Password reset tokens table
-    db.run(`
+    await client.query(`
         CREATE TABLE IF NOT EXISTS password_reset_tokens (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             token TEXT NOT NULL UNIQUE,
-            expires_at DATETIME NOT NULL,
-            used INTEGER DEFAULT 0,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            expires_at TIMESTAMP NOT NULL,
+            used BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     `);
 
-    // Add pending_email columns for email change verification (migration)
-    try {
-        db.run('ALTER TABLE users ADD COLUMN pending_email TEXT');
-        db.run('ALTER TABLE users ADD COLUMN pending_email_token TEXT');
-        db.run('ALTER TABLE users ADD COLUMN pending_email_expires DATETIME');
-    } catch (e) {
-        // Columns may already exist, ignore error
-    }
-
-    // Add last_active_at column for online/offline status tracking (migration)
-    try {
-        db.run('ALTER TABLE users ADD COLUMN last_active_at DATETIME');
-    } catch (e) {
-        // Column may already exist, ignore error
-    }
-
     // Create indexes for performance
-    db.run('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)');
-    db.run('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)');
-    db.run('CREATE INDEX IF NOT EXISTS idx_game_sessions_user ON game_sessions(user_id)');
-    db.run('CREATE INDEX IF NOT EXISTS idx_game_sessions_type ON game_sessions(game_type)');
-    db.run('CREATE INDEX IF NOT EXISTS idx_friendships_user ON friendships(user_id)');
-    db.run('CREATE INDEX IF NOT EXISTS idx_friendships_friend ON friendships(friend_id)');
-    db.run('CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id)');
-    db.run('CREATE INDEX IF NOT EXISTS idx_activity_feed_user ON activity_feed(user_id)');
-    db.run('CREATE INDEX IF NOT EXISTS idx_user_fact_progress_user ON user_fact_progress(user_id)');
-    db.run('CREATE INDEX IF NOT EXISTS idx_multiplayer_challenger ON multiplayer_matches(challenger_id)');
-    db.run('CREATE INDEX IF NOT EXISTS idx_multiplayer_opponent ON multiplayer_matches(opponent_id)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_game_sessions_user ON game_sessions(user_id)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_game_sessions_type ON game_sessions(game_type)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_friendships_user ON friendships(user_id)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_friendships_friend ON friendships(friend_id)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_activity_feed_user ON activity_feed(user_id)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_user_fact_progress_user ON user_fact_progress(user_id)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_multiplayer_challenger ON multiplayer_matches(challenger_id)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_multiplayer_opponent ON multiplayer_matches(opponent_id)');
 }
 
-export default { initDatabase, getDb, saveDatabase, reloadDatabase };
+/**
+ * Close the database connection pool.
+ *
+ * @returns {Promise<void>}
+ */
+export async function closeDatabase() {
+    if (pool) {
+        await pool.end();
+        pool = null;
+    }
+}
+
+export default { initDatabase, getDb, closeDatabase };

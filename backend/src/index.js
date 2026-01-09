@@ -6,15 +6,13 @@ import { createServer } from 'http';
 import { fileURLToPath } from 'url';
 import path from 'path';
 
-// Load environment variables from backend directory (Session 7 port 5002)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
-import { initDatabase, reloadDatabase } from './models/database.js';
+import { initDatabase } from './models/database.js';
 import { initWebSocket } from './services/websocket.js';
 
-// Routes
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import gameRoutes from './routes/games.js';
@@ -31,11 +29,22 @@ import tutorialRoutes from './routes/tutorial.js';
 
 const app = express();
 const PORT = process.env.PORT || 5002;
-const WS_PORT = process.env.WS_PORT || 3007;
 
 // Middleware
+const allowedOrigins = [
+    process.env.FRONTEND_URL,
+    'http://localhost:5173',
+    'http://localhost:3000'
+].filter(Boolean);
+
 app.use(cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     credentials: true
 }));
 app.use(express.json());
@@ -44,19 +53,6 @@ app.use(cookieParser());
 // Health check endpoint
 app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// Reload database endpoint (development only)
-app.post('/api/dev/reload-db', async (req, res) => {
-    if (process.env.NODE_ENV === 'production') {
-        return res.status(403).json({ error: { message: 'Not allowed in production' } });
-    }
-    try {
-        await reloadDatabase();
-        res.json({ status: 'ok', message: 'Database reloaded' });
-    } catch (err) {
-        res.status(500).json({ error: { message: err.message } });
-    }
 });
 
 // API Routes
@@ -99,54 +95,27 @@ const server = createServer(app);
 
 /**
  * Start the server after initializing the database.
- * Tries multiple ports if the default is in use.
  */
 async function startServer() {
     try {
-        // Initialize database (async for sql.js)
+        // Initialize database
         await initDatabase();
 
-        // Initialize WebSocket server for multiplayer
-        initWebSocket(WS_PORT);
+        // Initialize WebSocket server on the same HTTP server
+        initWebSocket(server);
 
-        // Try ports starting from PORT, incrementing if in use
-        const basePorts = [5002, 5003, 5004, 5005, 5006, 5007, 5008, 5009, 5010, 5011, 5012, 5013, 5014, 5015];
-        let serverStarted = false;
-
-        for (const port of basePorts) {
-            try {
-                await new Promise((resolve, reject) => {
-                    server.once('error', (err) => {
-                        if (err.code === 'EADDRINUSE') {
-                            console.log(`Port ${port} in use, trying next...`);
-                            resolve(false);
-                        } else {
-                            reject(err);
-                        }
-                    });
-                    server.listen(port, () => {
-                        console.log(`
+        // Start listening
+        server.listen(PORT, () => {
+            console.log(`
 ========================================
   GeoElevate Backend Server Started
 ========================================
-  HTTP API:    http://localhost:${port}
-  WebSocket:   ws://localhost:${WS_PORT}
+  HTTP API:    http://localhost:${PORT}
+  WebSocket:   ws://localhost:${PORT}/ws
   Environment: ${process.env.NODE_ENV || 'development'}
 ========================================
-                        `);
-                        serverStarted = true;
-                        resolve(true);
-                    });
-                });
-                if (serverStarted) break;
-            } catch (err) {
-                if (err.code !== 'EADDRINUSE') throw err;
-            }
-        }
-
-        if (!serverStarted) {
-            throw new Error('Could not find an available port');
-        }
+            `);
+        });
     } catch (err) {
         console.error('Failed to start server:', err);
         process.exit(1);
@@ -156,4 +125,3 @@ async function startServer() {
 startServer();
 
 export default app;
-

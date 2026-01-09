@@ -50,9 +50,13 @@ function MultiplayerGame() {
      * @returns {string} WebSocket URL
      */
     const getWsUrl = useCallback(() => {
-        const wsPort = 3007 // WebSocket server port (matches backend WS_PORT)
-        const wsHost = window.location.hostname
-        return `ws://${wsHost}:${wsPort}?token=${token}`
+        const wsUrl = import.meta.env.VITE_WS_URL
+        if (wsUrl) {
+            return `${wsUrl}?token=${token}`
+        }
+        // In development, use same host with /ws path
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+        return `${protocol}//${window.location.host}/ws?token=${token}`
     }, [token])
 
     // Fetch match details

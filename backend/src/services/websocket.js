@@ -2,16 +2,14 @@ import { WebSocketServer } from 'ws';
 import jwt from 'jsonwebtoken';
 import { getDb } from '../models/database.js';
 
-// Default JWT secret for development
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-geo-elevate-2024';
 
-const matches = new Map(); // matchId -> { players: Map, questions: [], currentQuestion: number }
-const userConnections = new Map(); // userId -> WebSocket
+const matches = new Map();
+const userConnections = new Map();
 
-// Rate limiting for answer submissions
-const answerRateLimits = new Map(); // `${userId}-${matchId}` -> { count: number, resetTime: number }
-const RATE_LIMIT_WINDOW_MS = 1000; // 1 second window
-const MAX_ANSWERS_PER_WINDOW = 3; // Max 3 answer submissions per second
+const answerRateLimits = new Map();
+const RATE_LIMIT_WINDOW_MS = 1000;
+const MAX_ANSWERS_PER_WINDOW = 3;
 
 /**
  * Check if user is rate limited for answer submissions.
@@ -26,7 +24,6 @@ function checkAnswerRateLimit(userId, matchId) {
     const limit = answerRateLimits.get(key);
 
     if (!limit || now > limit.resetTime) {
-        // Start new window
         answerRateLimits.set(key, { count: 1, resetTime: now + RATE_LIMIT_WINDOW_MS });
         return { limited: false };
     }
@@ -48,57 +45,40 @@ function checkAnswerRateLimit(userId, matchId) {
 function cleanupRateLimits() {
     const now = Date.now();
     for (const [key, limit] of answerRateLimits) {
-        if (now > limit.resetTime + 60000) { // Clean entries older than 1 minute
+        if (now > limit.resetTime + 60000) {
             answerRateLimits.delete(key);
         }
     }
 }
 
-// Run cleanup every minute
 setInterval(cleanupRateLimits, 60000);
 
 /**
- * Initialize WebSocket server for multiplayer functionality.
+ * Initialize WebSocket server attached to an existing HTTP server.
+ * This allows WebSocket to run on the same port as HTTP (required for Railway).
  *
- * @param {number} port - Port to listen on
- * @param {number} maxRetries - Maximum retries for port binding
+ * @param {http.Server} server - HTTP server to attach WebSocket to
  */
-export function initWebSocket(port, maxRetries = 5) {
-    let currentPort = port;
-    let retries = 0;
+export function initWebSocket(server) {
+    const wss = new WebSocketServer({ server, path: '/ws' });
 
-    function tryCreateServer() {
-        const wss = new WebSocketServer({ port: currentPort });
+    wss.on('error', (err) => {
+        console.error('WebSocket server error:', err);
+    });
 
-        wss.on('error', (err) => {
-            if (err.code === 'EADDRINUSE' && retries < maxRetries) {
-                retries++;
-                currentPort++;
-                console.log(`WebSocket port ${currentPort - 1} in use, trying ${currentPort}...`);
-                wss.close();
-                setTimeout(tryCreateServer, 100);
-            } else {
-                console.error('WebSocket server error:', err);
-            }
-        });
+    setupWebSocketHandlers(wss);
 
-        setupWebSocketHandlers(wss, currentPort);
-    }
-
-    tryCreateServer();
+    console.log('WebSocket server initialized on /ws path');
 }
 
 /**
  * Setup WebSocket event handlers.
  *
  * @param {WebSocketServer} wss - WebSocket server instance
- * @param {number} port - Port the server is listening on
  */
-function setupWebSocketHandlers(wss, port) {
-
-    wss.on('connection', (ws, req) => {
-        // Authenticate connection
-        const url = new URL(req.url, `ws://localhost:${port}`);
+function setupWebSocketHandlers(wss) {
+    wss.on('connection', async (ws, req) => {
+        const url = new URL(req.url, `ws://${req.headers.host}`);
         const token = url.searchParams.get('token');
 
         if (!token) {
@@ -115,14 +95,12 @@ function setupWebSocketHandlers(wss, port) {
             return;
         }
 
-        // Store connection
         userConnections.set(userId, ws);
         ws.userId = userId;
 
-        // Update last_active_at in database
         try {
             const db = getDb();
-            db.prepare('UPDATE users SET last_active_at = CURRENT_TIMESTAMP WHERE id = ?').run(userId);
+            await db.prepare('UPDATE users SET last_active_at = CURRENT_TIMESTAMP WHERE id = ?').run(userId);
         } catch (err) {
             console.error('Failed to update last_active_at:', err);
         }
@@ -142,8 +120,6 @@ function setupWebSocketHandlers(wss, port) {
         ws.on('close', () => {
             userConnections.delete(userId);
             console.log(`WebSocket: User ${userId} disconnected`);
-
-            // Handle player disconnection from active matches
             handlePlayerDisconnect(userId);
         });
 
@@ -151,8 +127,6 @@ function setupWebSocketHandlers(wss, port) {
             console.error(`WebSocket error for user ${userId}:`, err);
         });
     });
-
-    console.log(`WebSocket server running on port ${port}`);
 }
 
 /**
@@ -188,11 +162,10 @@ function handleMessage(ws, userId, message) {
  * @param {number} userId - User ID
  * @param {number} matchId - Match ID
  */
-function handleJoinMatch(ws, userId, matchId) {
+async function handleJoinMatch(ws, userId, matchId) {
     const db = getDb();
 
-    // Verify match exists and user is a participant
-    const match = db.prepare(`
+    const match = await db.prepare(`
         SELECT * FROM multiplayer_matches
         WHERE id = ? AND (challenger_id = ? OR opponent_id = ?) AND status = 'active'
     `).get(matchId, userId, userId);
@@ -205,30 +178,26 @@ function handleJoinMatch(ws, userId, matchId) {
         return;
     }
 
-    // Initialize match state if not exists
     if (!matches.has(matchId)) {
-        const questions = generateMatchQuestions(db, match.game_type);
+        const questions = await generateMatchQuestions(db, match.game_type);
         matches.set(matchId, {
             players: new Map(),
             questions,
             currentQuestion: 0,
-            answers: new Map() // questionIndex -> Map(userId -> answer)
+            answers: new Map()
         });
     }
 
     const matchState = matches.get(matchId);
     matchState.players.set(userId, { ws, score: 0, answered: false });
 
-    // Notify player they joined
     ws.send(JSON.stringify({
         type: 'match_joined',
         matchId,
         totalQuestions: matchState.questions.length
     }));
 
-    // Check if both players have joined
     if (matchState.players.size === 2) {
-        // Start the match
         broadcastToMatch(matchId, {
             type: 'match_start',
             question: sanitizeQuestion(matchState.questions[0]),
@@ -252,8 +221,7 @@ function handleJoinMatch(ws, userId, matchId) {
  * @param {string} answer - User's answer
  * @param {number} timeMs - Time taken in milliseconds
  */
-function handleSubmitAnswer(ws, userId, matchId, questionIndex, answer, timeMs) {
-    // Check rate limit first
+async function handleSubmitAnswer(ws, userId, matchId, questionIndex, answer, timeMs) {
     const rateLimit = checkAnswerRateLimit(userId, matchId);
     if (rateLimit.limited) {
         ws.send(JSON.stringify({
@@ -275,7 +243,6 @@ function handleSubmitAnswer(ws, userId, matchId, questionIndex, answer, timeMs) 
         return;
     }
 
-    // Validate timing (anti-cheat: reject impossibly fast answers)
     if (timeMs < 100) {
         ws.send(JSON.stringify({
             type: 'error',
@@ -284,45 +251,38 @@ function handleSubmitAnswer(ws, userId, matchId, questionIndex, answer, timeMs) 
         return;
     }
 
-    // Initialize answers map for this question if needed
     if (!matchState.answers.has(questionIndex)) {
         matchState.answers.set(questionIndex, new Map());
     }
 
     const questionAnswers = matchState.answers.get(questionIndex);
 
-    // Prevent duplicate answers
     if (questionAnswers.has(userId)) {
         return;
     }
 
-    // Validate answer and calculate score
     const question = matchState.questions[questionIndex];
     const isCorrect = answer === question.correctAnswer;
     const baseScore = 100;
-    const timeBonus = Math.max(0, Math.floor((15000 - timeMs) / 100)); // Bonus for speed
+    const timeBonus = Math.max(0, Math.floor((15000 - timeMs) / 100));
     const score = isCorrect ? baseScore + timeBonus : 0;
 
     questionAnswers.set(userId, { answer, isCorrect, timeMs, score });
     player.score += score;
     player.answered = true;
 
-    // Store answer in database
     const db = getDb();
-    db.prepare(`
+    await db.prepare(`
         INSERT INTO multiplayer_answers (match_id, user_id, question_index, question_data_json, user_answer, correct_answer, is_correct, time_ms)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(matchId, userId, questionIndex, JSON.stringify(question), answer, question.correctAnswer, isCorrect ? 1 : 0, timeMs);
+    `).run(matchId, userId, questionIndex, JSON.stringify(question), answer, question.correctAnswer, isCorrect, timeMs);
 
-    // Notify opponent that this player has answered
     broadcastToMatchExcept(matchId, userId, {
         type: 'opponent_answered',
         questionIndex
     });
 
-    // Check if both players have answered
     if (questionAnswers.size === 2) {
-        // Send results to both players
         const results = {};
         for (const [uid, ans] of questionAnswers) {
             results[uid] = {
@@ -341,12 +301,10 @@ function handleSubmitAnswer(ws, userId, matchId, questionIndex, answer, timeMs) 
             scores: getMatchScores(matchState)
         });
 
-        // Reset answered flags
         for (const p of matchState.players.values()) {
             p.answered = false;
         }
 
-        // Move to next question or end match
         setTimeout(() => {
             matchState.currentQuestion++;
 
@@ -357,10 +315,9 @@ function handleSubmitAnswer(ws, userId, matchId, questionIndex, answer, timeMs) 
                     questionIndex: matchState.currentQuestion
                 });
             } else {
-                // End match
                 endMatch(matchId);
             }
-        }, 3000); // 3 second delay between questions
+        }, 3000);
     }
 }
 
@@ -371,26 +328,23 @@ function handleSubmitAnswer(ws, userId, matchId, questionIndex, answer, timeMs) 
  * @param {number} userId - User ID
  * @param {number} matchId - Match ID
  */
-function handleLeaveMatch(ws, userId, matchId) {
+async function handleLeaveMatch(ws, userId, matchId) {
     const matchState = matches.get(matchId);
     if (!matchState) return;
 
     matchState.players.delete(userId);
 
-    // Notify other player
     broadcastToMatch(matchId, {
         type: 'opponent_left'
     });
 
-    // End match if it was active
     const db = getDb();
-    const match = db.prepare('SELECT * FROM multiplayer_matches WHERE id = ?').get(matchId);
+    const match = await db.prepare('SELECT * FROM multiplayer_matches WHERE id = ?').get(matchId);
 
     if (match && match.status === 'active') {
-        // Other player wins by forfeit
         const winnerId = match.challenger_id === userId ? match.opponent_id : match.challenger_id;
 
-        db.prepare(`
+        await db.prepare(`
             UPDATE multiplayer_matches
             SET status = 'completed', winner_id = ?, completed_at = CURRENT_TIMESTAMP
             WHERE id = ?
@@ -418,7 +372,7 @@ function handlePlayerDisconnect(userId) {
  *
  * @param {number} matchId - Match ID
  */
-function endMatch(matchId) {
+async function endMatch(matchId) {
     const matchState = matches.get(matchId);
     if (!matchState) return;
 
@@ -431,11 +385,9 @@ function endMatch(matchId) {
     } else if (scores[playerIds[1]] > scores[playerIds[0]]) {
         winnerId = playerIds[1];
     }
-    // If tied, winnerId stays null
 
-    // Update database
     const db = getDb();
-    db.prepare(`
+    await db.prepare(`
         UPDATE multiplayer_matches
         SET status = 'completed', winner_id = ?,
             challenger_score = ?, opponent_score = ?,
@@ -443,7 +395,6 @@ function endMatch(matchId) {
         WHERE id = ?
     `).run(winnerId, scores[playerIds[0]], scores[playerIds[1]], matchId);
 
-    // Broadcast final results
     broadcastToMatch(matchId, {
         type: 'match_end',
         winnerId,
@@ -451,20 +402,18 @@ function endMatch(matchId) {
         isTie: winnerId === null
     });
 
-    // Clean up
     matches.delete(matchId);
 }
 
 /**
  * Generate questions for a match.
  *
- * @param {Database} db - Database instance
+ * @param {object} db - Database instance
  * @param {string} gameType - Type of game
- * @returns {Array} Array of questions
+ * @returns {Promise<Array>} Array of questions
  */
-function generateMatchQuestions(db, gameType) {
-    // Simplified - reuse from games routes in production
-    const countries = db.prepare(`
+async function generateMatchQuestions(db, gameType) {
+    const countries = await db.prepare(`
         SELECT c.id, c.name, f.image_url
         FROM countries c
         JOIN flags f ON f.country_id = c.id
@@ -472,7 +421,7 @@ function generateMatchQuestions(db, gameType) {
         LIMIT 10
     `).all();
 
-    const allCountries = db.prepare(`
+    const allCountries = await db.prepare(`
         SELECT c.id, c.name, f.image_url
         FROM countries c
         JOIN flags f ON f.country_id = c.id
@@ -516,8 +465,8 @@ function sanitizeQuestion(question) {
  */
 function getMatchScores(matchState) {
     const scores = {};
-    for (const [userId, player] of matchState.players) {
-        scores[userId] = player.score;
+    for (const [odtUserId, player] of matchState.players) {
+        scores[odtUserId] = player.score;
     }
     return scores;
 }
@@ -552,8 +501,8 @@ function broadcastToMatchExcept(matchId, excludeUserId, message) {
     if (!matchState) return;
 
     const data = JSON.stringify(message);
-    for (const [userId, player] of matchState.players) {
-        if (userId !== excludeUserId && player.ws && player.ws.readyState === 1) {
+    for (const [odtUserId, player] of matchState.players) {
+        if (odtUserId !== excludeUserId && player.ws && player.ws.readyState === 1) {
             player.ws.send(data);
         }
     }
@@ -567,7 +516,7 @@ function broadcastToMatchExcept(matchId, excludeUserId, message) {
  */
 export function isUserOnline(userId) {
     const ws = userConnections.get(userId);
-    return ws && ws.readyState === 1; // 1 = OPEN
+    return ws && ws.readyState === 1;
 }
 
 /**
@@ -578,8 +527,8 @@ export function isUserOnline(userId) {
  */
 export function getOnlineStatus(userIds) {
     const status = {};
-    for (const userId of userIds) {
-        status[userId] = isUserOnline(userId);
+    for (const odtUserId of userIds) {
+        status[odtUserId] = isUserOnline(odtUserId);
     }
     return status;
 }
