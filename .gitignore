@@ -54,5 +54,11 @@ coverage/
 .temp/
 .tmp/
 
+# Test screenshots
+.playwright-mcp/
+
+# Claude Code local config
+.claude/
+
 # Feature database (managed separately)
 features.db

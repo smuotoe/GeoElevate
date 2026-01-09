@@ -212,7 +212,7 @@ function Multiplayer() {
                             </p>
                             <button
                                 className="btn btn-primary"
-                                onClick={() => navigate(`/play/${match.game_type}?match=${matchId}`)}
+                                onClick={() => navigate(`/multiplayer/game/${match.game_type}?match=${matchId}`)}
                             >
                                 Start Playing
                             </button>
