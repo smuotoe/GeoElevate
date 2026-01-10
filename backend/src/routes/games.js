@@ -8,6 +8,13 @@ const router = Router();
 // Daily XP cap per game type (encourages variety)
 const DAILY_XP_CAP = 2000;
 
+// Human-readable names for challenge types
+const CHALLENGE_TYPE_NAMES = {
+    play_games: 'Play Games',
+    correct_answers: 'Correct Answers',
+    perfect_game: 'Perfect Game'
+};
+
 /**
  * Get remaining XP that can be earned today for a game type.
  *
@@ -1379,10 +1386,11 @@ async function updateDailyChallengeProgress(db, userId, gameType, correctCount, 
                 console.log(`Awarded ${challenge.xp_reward} XP for completing challenge`);
 
                 // Create notification
+                const challengeName = CHALLENGE_TYPE_NAMES[challenge.challenge_type] || challenge.challenge_type;
                 await db.prepare(`
                     INSERT INTO notifications (user_id, type, title, body)
                     VALUES (?, 'challenge_complete', 'Challenge Complete!', ?)
-                `).run(userId, `You earned ${challenge.xp_reward} XP for completing "${challenge.challenge_type}"!`);
+                `).run(userId, `You earned ${challenge.xp_reward} XP for completing "${challengeName}"!`);
             }
         }
     }
