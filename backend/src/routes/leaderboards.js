@@ -90,11 +90,13 @@ router.get('/global', optionalAuthenticate, async (req, res, next) => {
         const db = getDb();
 
         const leaderboard = await db.prepare(`
-            SELECT id, username, avatar_url, overall_xp, overall_level, current_streak,
-                   ROW_NUMBER() OVER (ORDER BY overall_xp DESC) as rank
-            FROM users
-            WHERE is_guest = false
-            ORDER BY overall_xp DESC
+            SELECT * FROM (
+                SELECT id, username, avatar_url, overall_xp, overall_level, current_streak,
+                       ROW_NUMBER() OVER (ORDER BY overall_xp DESC, id ASC) as rank
+                FROM users
+                WHERE is_guest = false
+            ) ranked
+            ORDER BY rank
             LIMIT ? OFFSET ?
         `).all(parseInt(limit), parseInt(offset));
 
@@ -111,7 +113,7 @@ router.get('/global', optionalAuthenticate, async (req, res, next) => {
         if (req.userId) {
             const userRankData = await db.prepare(`
                 SELECT rank, overall_xp FROM (
-                    SELECT id, overall_xp, ROW_NUMBER() OVER (ORDER BY overall_xp DESC) as rank
+                    SELECT id, overall_xp, ROW_NUMBER() OVER (ORDER BY overall_xp DESC, id ASC) as rank
                     FROM users WHERE is_guest = false
                 ) sub
                 WHERE id = ?
@@ -148,12 +150,14 @@ router.get('/game/:gameType', optionalAuthenticate, async (req, res, next) => {
         const db = getDb();
 
         const leaderboard = await db.prepare(`
-            SELECT u.id, u.username, u.avatar_url, ucs.xp, ucs.level, ucs.high_score,
-                   ROW_NUMBER() OVER (ORDER BY ucs.xp DESC) as rank
-            FROM user_category_stats ucs
-            JOIN users u ON u.id = ucs.user_id
-            WHERE ucs.category = ? AND u.is_guest = false
-            ORDER BY ucs.xp DESC
+            SELECT * FROM (
+                SELECT u.id, u.username, u.avatar_url, ucs.xp, ucs.level, ucs.high_score,
+                       ROW_NUMBER() OVER (ORDER BY ucs.xp DESC, u.id ASC) as rank
+                FROM user_category_stats ucs
+                JOIN users u ON u.id = ucs.user_id
+                WHERE ucs.category = ? AND u.is_guest = false
+            ) ranked
+            ORDER BY rank
             LIMIT ? OFFSET ?
         `).all(gameType, parseInt(limit), parseInt(offset));
 
@@ -161,9 +165,10 @@ router.get('/game/:gameType', optionalAuthenticate, async (req, res, next) => {
         if (req.userId) {
             const result = await db.prepare(`
                 SELECT rank FROM (
-                    SELECT user_id, ROW_NUMBER() OVER (ORDER BY xp DESC) as rank
-                    FROM user_category_stats
-                    WHERE category = ?
+                    SELECT ucs.user_id, ROW_NUMBER() OVER (ORDER BY ucs.xp DESC, ucs.user_id ASC) as rank
+                    FROM user_category_stats ucs
+                    JOIN users u ON u.id = ucs.user_id
+                    WHERE ucs.category = ? AND u.is_guest = false
                 ) sub
                 WHERE user_id = ?
             `).get(gameType, req.userId);
@@ -192,16 +197,18 @@ router.get('/weekly', optionalAuthenticate, async (req, res, next) => {
 
         if (hasGameTypeFilter) {
             leaderboard = await db.prepare(`
-                SELECT u.id, u.username, u.avatar_url,
-                       COALESCE(SUM(gs.xp_earned), 0) as weekly_xp,
-                       ROW_NUMBER() OVER (ORDER BY COALESCE(SUM(gs.xp_earned), 0) DESC) as rank
-                FROM users u
-                LEFT JOIN game_sessions gs ON gs.user_id = u.id
-                    AND gs.completed_at >= ?
-                    AND gs.game_type = ?
-                WHERE u.is_guest = false
-                GROUP BY u.id, u.username, u.avatar_url
-                ORDER BY weekly_xp DESC
+                SELECT * FROM (
+                    SELECT u.id, u.username, u.avatar_url,
+                           COALESCE(SUM(gs.xp_earned), 0) as weekly_xp,
+                           ROW_NUMBER() OVER (ORDER BY COALESCE(SUM(gs.xp_earned), 0) DESC, u.id ASC) as rank
+                    FROM users u
+                    LEFT JOIN game_sessions gs ON gs.user_id = u.id
+                        AND gs.completed_at >= ?
+                        AND gs.game_type = ?
+                    WHERE u.is_guest = false
+                    GROUP BY u.id, u.username, u.avatar_url
+                ) ranked
+                ORDER BY rank
                 LIMIT ? OFFSET ?
             `).all(startOfWeek, gameType, parseInt(limit), parseInt(offset));
 
@@ -230,15 +237,17 @@ router.get('/weekly', optionalAuthenticate, async (req, res, next) => {
             }
         } else {
             leaderboard = await db.prepare(`
-                SELECT u.id, u.username, u.avatar_url,
-                       COALESCE(SUM(gs.xp_earned), 0) as weekly_xp,
-                       ROW_NUMBER() OVER (ORDER BY COALESCE(SUM(gs.xp_earned), 0) DESC) as rank
-                FROM users u
-                LEFT JOIN game_sessions gs ON gs.user_id = u.id
-                    AND gs.completed_at >= ?
-                WHERE u.is_guest = false
-                GROUP BY u.id, u.username, u.avatar_url
-                ORDER BY weekly_xp DESC
+                SELECT * FROM (
+                    SELECT u.id, u.username, u.avatar_url,
+                           COALESCE(SUM(gs.xp_earned), 0) as weekly_xp,
+                           ROW_NUMBER() OVER (ORDER BY COALESCE(SUM(gs.xp_earned), 0) DESC, u.id ASC) as rank
+                    FROM users u
+                    LEFT JOIN game_sessions gs ON gs.user_id = u.id
+                        AND gs.completed_at >= ?
+                    WHERE u.is_guest = false
+                    GROUP BY u.id, u.username, u.avatar_url
+                ) ranked
+                ORDER BY rank
                 LIMIT ? OFFSET ?
             `).all(startOfWeek, parseInt(limit), parseInt(offset));
 
