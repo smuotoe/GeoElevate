@@ -605,24 +605,26 @@ function Profile() {
                 {/* XP reward */}
                 <div style={{
                     display: 'flex',
-                    justifyContent: 'space-between',
                     alignItems: 'center',
+                    gap: '10px',
                     paddingTop: isUnlocked ? 0 : '4px',
                     borderTop: isUnlocked ? 'none' : '1px solid rgba(255,255,255,0.05)'
                 }}>
                     <span style={{
-                        fontSize: '12px',
-                        color: 'var(--text-secondary)'
+                        fontSize: '11px',
+                        color: 'var(--text-secondary)',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px'
                     }}>
                         {achievement.category}
                     </span>
                     <span style={{
-                        fontSize: '13px',
+                        fontSize: '12px',
                         color: isUnlocked ? 'var(--primary)' : 'var(--text-secondary)',
                         fontWeight: '600',
                         backgroundColor: isUnlocked ? 'rgba(var(--primary-rgb, 59, 130, 246), 0.15)' : 'rgba(255,255,255,0.05)',
-                        padding: '4px 10px',
-                        borderRadius: '12px'
+                        padding: '3px 8px',
+                        borderRadius: '10px'
                     }}>
                         +{achievement.xp_reward} XP
                     </span>
@@ -899,11 +901,11 @@ function Profile() {
                     </div>
                 </div>
 
-                {/* Achievements grid */}
+                {/* Achievements list */}
                 <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-                    gap: '16px'
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px'
                 }}>
                     {achievementList.map(renderAchievementBadge)}
                 </div>
