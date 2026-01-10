@@ -165,11 +165,24 @@ function createDbWrapper(database) {
                         // For INSERT statements, try to get the returning id
                         let execSql = pgSql;
                         const isInsert = pgSql.trim().toUpperCase().startsWith('INSERT');
-                        if (isInsert && !pgSql.toUpperCase().includes('RETURNING')) {
+                        const hasReturning = pgSql.toUpperCase().includes('RETURNING');
+
+                        if (isInsert && !hasReturning) {
                             execSql = pgSql.replace(/;?\s*$/, ' RETURNING id');
                         }
 
-                        const result = await database.query(execSql, params);
+                        let result;
+                        try {
+                            result = await database.query(execSql, params);
+                        } catch (err) {
+                            // If table has no 'id' column, retry without RETURNING id
+                            if (err.message.includes('column "id" does not exist') && isInsert && !hasReturning) {
+                                result = await database.query(pgSql, params);
+                                return { changes: result.rowCount, lastInsertRowid: 0 };
+                            }
+                            throw err;
+                        }
+
                         return {
                             changes: result.rowCount,
                             lastInsertRowid: result.rows[0]?.id || 0
@@ -217,10 +230,24 @@ function createClientWrapper(client) {
                 async run(...params) {
                     let execSql = pgSql;
                     const isInsert = pgSql.trim().toUpperCase().startsWith('INSERT');
-                    if (isInsert && !pgSql.toUpperCase().includes('RETURNING')) {
+                    const hasReturning = pgSql.toUpperCase().includes('RETURNING');
+
+                    if (isInsert && !hasReturning) {
                         execSql = pgSql.replace(/;?\s*$/, ' RETURNING id');
                     }
-                    const result = await client.query(execSql, params);
+
+                    let result;
+                    try {
+                        result = await client.query(execSql, params);
+                    } catch (err) {
+                        // If table has no 'id' column, retry without RETURNING id
+                        if (err.message.includes('column "id" does not exist') && isInsert && !hasReturning) {
+                            result = await client.query(pgSql, params);
+                            return { changes: result.rowCount, lastInsertRowid: 0 };
+                        }
+                        throw err;
+                    }
+
                     return {
                         changes: result.rowCount,
                         lastInsertRowid: result.rows[0]?.id || 0
