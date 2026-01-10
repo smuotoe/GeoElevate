@@ -177,12 +177,21 @@ function Achievements() {
                                         className={`${styles.achievementCard} ${isUnlocked(achievement) ? styles.unlocked : styles.locked}`}
                                     >
                                         <div className={styles.achievementIcon}>
-                                            {isUnlocked(achievement) ? (
+                                            {achievement.image_url ? (
+                                                <img
+                                                    src={achievement.image_url}
+                                                    alt={achievement.name}
+                                                    className={`${styles.badgeImage} ${!isUnlocked(achievement) ? styles.lockedImage : ''}`}
+                                                />
+                                            ) : isUnlocked(achievement) ? (
                                                 <span className={styles.unlockedIcon}>
                                                     <AchievementIcon size={28} />
                                                 </span>
                                             ) : (
                                                 <span className={styles.lockedIcon}><Lock size={28} /></span>
+                                            )}
+                                            {!isUnlocked(achievement) && achievement.image_url && (
+                                                <span className={styles.lockOverlay}><Lock size={20} /></span>
                                             )}
                                         </div>
                                         <div className={styles.achievementInfo}>

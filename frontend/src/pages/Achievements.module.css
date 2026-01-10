@@ -131,8 +131,13 @@
 
 .achievementIcon {
     font-size: 2em;
-    min-width: 50px;
+    min-width: 56px;
+    height: 56px;
     text-align: center;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .unlockedIcon {
@@ -142,6 +147,35 @@
 .lockedIcon {
     filter: grayscale(100%);
     opacity: 0.5;
+}
+
+.badgeImage {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--color-primary);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.lockedImage {
+    filter: grayscale(100%) brightness(0.7);
+    border-color: var(--color-border);
+}
+
+.lockOverlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.6);
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
 }
 
 .achievementInfo {

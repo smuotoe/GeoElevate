@@ -438,6 +438,7 @@ async function createTables(client) {
             name TEXT NOT NULL UNIQUE,
             description TEXT NOT NULL,
             icon TEXT DEFAULT 'trophy',
+            image_url TEXT,
             category TEXT NOT NULL,
             requirement_type TEXT NOT NULL,
             requirement_value INTEGER NOT NULL,
