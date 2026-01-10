@@ -1052,17 +1052,19 @@ async function generateTriviaQuestions(db, region, count, difficulty) {
  * @param {number} totalQuestions - Total questions
  */
 async function updateUserStats(db, userId, gameType, score, xpEarned, correctCount, totalQuestions) {
-    // Update category stats
+    // Update category stats and recalculate level
+    // Level formula: every 100 XP = 1 level (Level 1 at 0-99, Level 2 at 100-199, etc.)
     await db.prepare(`
         UPDATE user_category_stats
         SET xp = xp + ?,
+            level = (xp + ?) / 100 + 1,
             games_played = games_played + 1,
             total_correct = total_correct + ?,
             total_questions = total_questions + ?,
             high_score = CASE WHEN ? > high_score THEN ? ELSE high_score END,
             updated_at = CURRENT_TIMESTAMP
         WHERE user_id = ? AND category = ?
-    `).run(xpEarned, correctCount, totalQuestions, score, score, userId, gameType);
+    `).run(xpEarned, xpEarned, correctCount, totalQuestions, score, score, userId, gameType);
 
     // Get user's last played date BEFORE updating (for streak calculation)
     const user = await db.prepare(
