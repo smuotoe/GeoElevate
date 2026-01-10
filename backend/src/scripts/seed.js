@@ -1,7 +1,11 @@
 import 'dotenv/config';
 import { initDatabase, getDb, closeDatabase } from '../models/database.js';
 
-const REST_COUNTRIES_URL = 'https://restcountries.com/v3.1/all';
+const REST_COUNTRIES_URLS = [
+    'https://restcountries.com/v3.1/all',
+    'https://restcountries.com/v3/all',
+    'https://raw.githubusercontent.com/mledoze/countries/master/countries.json'
+];
 const TRIVIA_API_URL = 'https://the-trivia-api.com/v2/questions';
 const OPENTDB_URL = 'https://opentdb.com/api.php';
 
@@ -13,11 +17,17 @@ const OPENTDB_URL = 'https://opentdb.com/api.php';
  * @returns {Promise<object>} JSON response
  */
 async function fetchWithRetry(url, retries = 3) {
+    const headers = {
+        'User-Agent': 'GeoElevate/1.0 (https://github.com/smuotoe/GeoElevate)',
+        'Accept': 'application/json'
+    };
+
     for (let attempt = 1; attempt <= retries; attempt++) {
         try {
-            const response = await fetch(url);
+            const response = await fetch(url, { headers });
             if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                const text = await response.text();
+                throw new Error(`HTTP ${response.status}: ${response.statusText} - ${text.slice(0, 100)}`);
             }
             return await response.json();
         } catch (error) {
@@ -76,14 +86,51 @@ function mapContinent(continents) {
 }
 
 /**
+ * Fetch country data from multiple sources with fallback.
+ *
+ * @returns {Promise<object[]>} Array of country data
+ */
+async function fetchCountryData() {
+    for (const url of REST_COUNTRIES_URLS) {
+        try {
+            console.log(`Trying ${url}...`);
+            const data = await fetchWithRetry(url, 2);
+
+            // Handle mledoze/countries format (GitHub raw)
+            if (url.includes('mledoze')) {
+                return data.map(c => ({
+                    name: { common: c.name?.common || c.name },
+                    cca2: c.cca2,
+                    continents: c.region ? [c.region] : [],
+                    subregion: c.subregion,
+                    region: c.region,
+                    population: c.population || 0,
+                    capital: c.capital,
+                    flags: {
+                        png: `https://flagcdn.com/w320/${(c.cca2 || '').toLowerCase()}.png`,
+                        svg: `https://flagcdn.com/${(c.cca2 || '').toLowerCase()}.svg`
+                    },
+                    languages: c.languages || {}
+                }));
+            }
+
+            return data;
+        } catch (error) {
+            console.error(`Failed to fetch from ${url}: ${error.message}`);
+        }
+    }
+    throw new Error('All country data sources failed');
+}
+
+/**
  * Seed countries, capitals, flags, languages, and country_languages tables.
  *
  * @param {object} db - Database wrapper
  * @returns {Promise<{countryCount: number, languageCount: number}>}
  */
 async function seedCountryData(db) {
-    console.log('Fetching country data from REST Countries API...');
-    const countries = await fetchWithRetry(REST_COUNTRIES_URL);
+    console.log('Fetching country data...');
+    const countries = await fetchCountryData();
     console.log(`Fetched ${countries.length} countries`);
 
     const languageMap = new Map();
