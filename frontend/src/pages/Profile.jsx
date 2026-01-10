@@ -385,51 +385,178 @@ function Profile() {
         const xpForNextLevel = getXpForLevel(stat.level)
         const currentLevelXp = stat.xp % xpForNextLevel
         const progress = xpForNextLevel > 0 ? (currentLevelXp / xpForNextLevel) * 100 : 0
+        const accuracy = stat.total_questions > 0
+            ? Math.round((stat.total_correct / stat.total_questions) * 100)
+            : 0
+        const IconComponent = CATEGORY_ICONS[stat.category] || Trophy
 
         return (
-            <div key={stat.category} style={{ marginBottom: '16px' }}>
+            <div key={stat.category} style={{
+                marginBottom: '16px',
+                padding: '16px',
+                backgroundColor: 'rgba(255,255,255,0.03)',
+                borderRadius: '12px',
+                border: '1px solid rgba(255,255,255,0.08)'
+            }}>
+                {/* Header: Icon, Name, Level Badge */}
                 <div style={{
                     display: 'flex',
-                    justifyContent: 'space-between',
-                    marginBottom: '4px'
-                }}>
-                    <span style={{ color: 'var(--text-primary)', fontWeight: '500' }}>
-                        {getCategoryName(stat.category)}
-                    </span>
-                    <span style={{ color: 'var(--text-secondary)' }}>
-                        Level {stat.level} - {currentLevelXp}/{xpForNextLevel} XP
-                    </span>
-                </div>
-                <div style={{
-                    height: '8px',
-                    backgroundColor: 'var(--surface)',
-                    borderRadius: '4px',
-                    overflow: 'hidden'
+                    alignItems: 'center',
+                    gap: '12px',
+                    marginBottom: '12px'
                 }}>
                     <div style={{
-                        height: '100%',
-                        width: `${Math.min(progress, 100)}%`,
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: '10px',
                         backgroundColor: 'var(--primary)',
-                        borderRadius: '4px',
-                        transition: 'width 0.3s ease'
-                    }} />
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                    }}>
+                        <IconComponent size={22} color="white" />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                        <div style={{
+                            color: 'var(--text-primary)',
+                            fontWeight: '600',
+                            fontSize: '16px'
+                        }}>
+                            {getCategoryName(stat.category)}
+                        </div>
+                        <div style={{
+                            color: 'var(--text-secondary)',
+                            fontSize: '12px'
+                        }}>
+                            {stat.games_played || 0} games played
+                        </div>
+                    </div>
+                    <div style={{
+                        backgroundColor: 'var(--primary)',
+                        color: 'white',
+                        padding: '6px 12px',
+                        borderRadius: '20px',
+                        fontWeight: '700',
+                        fontSize: '14px'
+                    }}>
+                        LVL {stat.level}
+                    </div>
                 </div>
+
+                {/* XP Progress */}
+                <div style={{ marginBottom: '12px' }}>
+                    <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: '6px'
+                    }}>
+                        <span style={{
+                            fontSize: '12px',
+                            color: 'var(--text-secondary)',
+                            fontWeight: '500'
+                        }}>
+                            XP to Level {stat.level + 1}
+                        </span>
+                        <span style={{
+                            fontSize: '13px',
+                            color: 'var(--primary)',
+                            fontWeight: '600'
+                        }}>
+                            {currentLevelXp} / {xpForNextLevel}
+                        </span>
+                    </div>
+                    <div style={{
+                        height: '10px',
+                        backgroundColor: 'rgba(255,255,255,0.1)',
+                        borderRadius: '5px',
+                        overflow: 'hidden'
+                    }}>
+                        <div style={{
+                            height: '100%',
+                            width: `${Math.min(progress, 100)}%`,
+                            backgroundColor: 'var(--primary)',
+                            borderRadius: '5px',
+                            transition: 'width 0.3s ease'
+                        }} />
+                    </div>
+                    <div style={{
+                        fontSize: '11px',
+                        color: 'var(--text-secondary)',
+                        marginTop: '4px'
+                    }}>
+                        Total XP: {stat.xp || 0}
+                    </div>
+                </div>
+
+                {/* Stats Row */}
                 <div style={{
                     display: 'flex',
-                    justifyContent: 'space-between',
-                    marginTop: '4px',
-                    fontSize: '12px',
-                    color: 'var(--text-secondary)'
+                    gap: '12px',
+                    paddingTop: '12px',
+                    borderTop: '1px solid rgba(255,255,255,0.08)'
                 }}>
-                    <span>{stat.games_played || 0} games</span>
-                    <span>
-                        {stat.high_score > 0 && (
-                            <span style={{ color: 'var(--accent)', marginRight: '8px' }}>
-                                High: {stat.high_score}
-                            </span>
-                        )}
-                        {stat.total_correct || 0}/{stat.total_questions || 0} correct
-                    </span>
+                    {/* Accuracy */}
+                    <div style={{
+                        flex: 1,
+                        textAlign: 'center',
+                        padding: '8px',
+                        backgroundColor: 'rgba(255,255,255,0.03)',
+                        borderRadius: '8px'
+                    }}>
+                        <div style={{
+                            fontSize: '18px',
+                            fontWeight: '700',
+                            color: accuracy >= 70 ? 'var(--success, #22c55e)' : accuracy >= 50 ? 'var(--warning, #eab308)' : 'var(--text-primary)'
+                        }}>
+                            {accuracy}%
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                            Accuracy
+                        </div>
+                    </div>
+
+                    {/* Correct Answers */}
+                    <div style={{
+                        flex: 1,
+                        textAlign: 'center',
+                        padding: '8px',
+                        backgroundColor: 'rgba(255,255,255,0.03)',
+                        borderRadius: '8px'
+                    }}>
+                        <div style={{
+                            fontSize: '18px',
+                            fontWeight: '700',
+                            color: 'var(--text-primary)'
+                        }}>
+                            {stat.total_correct || 0}
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                            Correct
+                        </div>
+                    </div>
+
+                    {/* Best Score */}
+                    {stat.high_score > 0 && (
+                        <div style={{
+                            flex: 1,
+                            textAlign: 'center',
+                            padding: '8px',
+                            backgroundColor: 'rgba(255,255,255,0.03)',
+                            borderRadius: '8px'
+                        }}>
+                            <div style={{
+                                fontSize: '18px',
+                                fontWeight: '700',
+                                color: 'var(--accent, #f59e0b)'
+                            }}>
+                                {stat.high_score.toLocaleString()}
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                                Best Score
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         )
