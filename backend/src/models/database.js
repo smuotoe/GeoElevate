@@ -16,9 +16,10 @@ export async function initDatabase() {
         throw new Error('DATABASE_URL environment variable is required');
     }
 
+    const useSSL = process.env.DATABASE_SSL === 'true';
     pool = new Pool({
         connectionString,
-        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+        ssl: useSSL ? { rejectUnauthorized: false } : false
     });
 
     // Test connection
