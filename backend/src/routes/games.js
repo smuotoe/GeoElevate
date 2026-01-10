@@ -930,7 +930,7 @@ async function generateLanguageQuestions(db, mode, region, count, difficulty) {
         // Default: country-to-languages - Show country, user picks the language
         let query = `
             SELECT c.id as country_id, c.name as country, c.continent, c.population,
-                   GROUP_CONCAT(l.name) as languages,
+                   STRING_AGG(l.name, ',') as languages,
                    (SELECT l2.name FROM languages l2
                     JOIN country_languages cl2 ON l2.id = cl2.language_id
                     WHERE cl2.country_id = c.id
