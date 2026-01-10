@@ -34,21 +34,21 @@ function getTodayForTimezone(timezone) {
  * Query params:
  *   - timezone: IANA timezone string (optional, defaults to UTC)
  */
-router.get('/challenges', authenticate, (req, res, next) => {
+router.get('/challenges', authenticate, async (req, res, next) => {
     try {
         const db = getDb();
         const timezone = req.query.timezone || 'UTC';
         const today = getTodayForTimezone(timezone);
 
         // Get or create daily challenges
-        let challenges = db.prepare(`
+        let challenges = await db.prepare(`
             SELECT * FROM daily_challenges
             WHERE user_id = ? AND date = ?
         `).all(req.userId, today);
 
         if (challenges.length === 0) {
             // Generate new daily challenges
-            challenges = generateDailyChallenges(db, req.userId, today);
+            challenges = await generateDailyChallenges(db, req.userId, today);
         }
 
         res.json({ challenges, date: today, timezone });
@@ -84,12 +84,12 @@ function getYesterdayForTimezone(timezone) {
  * Query params:
  *   - timezone: IANA timezone string (optional, defaults to UTC)
  */
-router.get('/streak', authenticate, (req, res, next) => {
+router.get('/streak', authenticate, async (req, res, next) => {
     try {
         const db = getDb();
         const timezone = req.query.timezone || 'UTC';
 
-        const user = db.prepare(`
+        const user = await db.prepare(`
             SELECT current_streak, longest_streak, last_played_date
             FROM users WHERE id = ?
         `).get(req.userId);
@@ -117,13 +117,13 @@ router.get('/streak', authenticate, (req, res, next) => {
  * Update daily challenge progress.
  * POST /api/daily/challenges/:id/progress
  */
-router.post('/challenges/:id/progress', authenticate, (req, res, next) => {
+router.post('/challenges/:id/progress', authenticate, async (req, res, next) => {
     try {
         const { id } = req.params;
         const { increment = 1 } = req.body;
         const db = getDb();
 
-        const challenge = db.prepare(`
+        const challenge = await db.prepare(`
             SELECT * FROM daily_challenges WHERE id = ? AND user_id = ?
         `).get(id, req.userId);
 
@@ -143,22 +143,22 @@ router.post('/challenges/:id/progress', authenticate, (req, res, next) => {
         const newValue = Math.min(challenge.current_value + increment, challenge.target_value);
         const isCompleted = newValue >= challenge.target_value;
 
-        db.prepare(`
+        await db.prepare(`
             UPDATE daily_challenges
             SET current_value = ?, is_completed = ?
             WHERE id = ?
-        `).run(newValue, isCompleted ? 1 : 0, id);
+        `).run(newValue, isCompleted, id);
 
         // If completed, award XP
         if (isCompleted) {
-            db.prepare(`
+            await db.prepare(`
                 UPDATE users
                 SET overall_xp = overall_xp + ?
                 WHERE id = ?
             `).run(challenge.xp_reward, req.userId);
 
             // Create notification
-            db.prepare(`
+            await db.prepare(`
                 INSERT INTO notifications (user_id, type, title, body)
                 VALUES (?, 'challenge_complete', 'Challenge Complete!', ?)
             `).run(req.userId, `You earned ${challenge.xp_reward} XP!`);
@@ -177,14 +177,14 @@ router.post('/challenges/:id/progress', authenticate, (req, res, next) => {
 /**
  * Generate daily challenges for a user.
  *
- * @param {Database} db - Database instance
+ * @param {object} db - Database instance
  * @param {number} userId - User ID
  * @param {string} date - Date string (YYYY-MM-DD)
- * @returns {Array} Array of generated challenges
+ * @returns {Promise<Array>} Array of generated challenges
  */
-function generateDailyChallenges(db, userId, date) {
+async function generateDailyChallenges(db, userId, date) {
     // Get user's weak areas
-    const stats = db.prepare(`
+    const stats = await db.prepare(`
         SELECT category,
                CASE WHEN total_questions > 0
                    THEN CAST(total_correct AS FLOAT) / total_questions
@@ -210,16 +210,13 @@ function generateDailyChallenges(db, userId, date) {
         });
     }
 
-    const insertChallenge = db.prepare(`
-        INSERT INTO daily_challenges (user_id, date, challenge_type, target_value, xp_reward)
-        VALUES (?, ?, ?, ?, ?)
-    `);
-
     const challenges = [];
     for (const challenge of challengeTypes.slice(0, 3)) {
-        const result = insertChallenge.run(
-            userId, date, challenge.type, challenge.targetValue, challenge.xpReward
-        );
+        const result = await db.prepare(`
+            INSERT INTO daily_challenges (user_id, date, challenge_type, target_value, xp_reward)
+            VALUES (?, ?, ?, ?, ?)
+        `).run(userId, date, challenge.type, challenge.targetValue, challenge.xpReward);
+
         challenges.push({
             id: result.lastInsertRowid,
             user_id: userId,
@@ -227,7 +224,7 @@ function generateDailyChallenges(db, userId, date) {
             challenge_type: challenge.type,
             target_value: challenge.targetValue,
             current_value: 0,
-            is_completed: 0,
+            is_completed: false,
             xp_reward: challenge.xpReward
         });
     }

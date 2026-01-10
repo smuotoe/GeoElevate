@@ -11,15 +11,15 @@ const DAILY_XP_CAP = 500;
 /**
  * Get remaining XP that can be earned today for a game type.
  *
- * @param {Database} db - Database instance
+ * @param {object} db - Database instance
  * @param {number} userId - User ID
  * @param {string} gameType - Type of game
- * @returns {{ earnedToday: number, remaining: number, capped: boolean }}
+ * @returns {Promise<{ earnedToday: number, remaining: number, capped: boolean }>}
  */
-function getDailyXpStatus(db, userId, gameType) {
+async function getDailyXpStatus(db, userId, gameType) {
     const today = new Date().toISOString().split('T')[0];
 
-    const result = db.prepare(`
+    const result = await db.prepare(`
         SELECT COALESCE(SUM(xp_earned), 0) as earned_today
         FROM game_sessions
         WHERE user_id = ? AND game_type = ? AND DATE(completed_at) = ?
@@ -39,13 +39,13 @@ function getDailyXpStatus(db, userId, gameType) {
  * Get recommended games based on user's skill gaps.
  * GET /api/games/recommendations
  */
-router.get('/recommendations', authenticate, (req, res, next) => {
+router.get('/recommendations', authenticate, async (req, res, next) => {
     try {
         const db = getDb();
         const limit = Math.min(parseInt(req.query.limit) || 3, 5);
 
         // Get user's category stats to find skill gaps
-        const categoryStats = db.prepare(`
+        const categoryStats = await db.prepare(`
             SELECT category, xp, level, games_played, total_correct, total_questions,
                    high_score, average_time_ms
             FROM user_category_stats
@@ -184,99 +184,112 @@ router.get('/types', (req, res) => {
 
     res.json({ gameTypes });
 });
+
 /**
  * Debug endpoint to check user streak data.
  * GET /api/games/debug-user/:id
  */
-router.get('/debug-user/:id', (req, res) => {
-    const db = getDb();
-    const user = db.prepare(
-        'SELECT id, username, last_played_date, current_streak, longest_streak, overall_xp FROM users WHERE id = ?'
-    ).get(req.params.id);
+router.get('/debug-user/:id', async (req, res, next) => {
+    try {
+        const db = getDb();
+        const user = await db.prepare(
+            'SELECT id, username, last_played_date, current_streak, longest_streak, overall_xp FROM users WHERE id = ?'
+        ).get(req.params.id);
 
-    const today = new Date().toISOString().split('T')[0];
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+        const today = new Date().toISOString().split('T')[0];
+        const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
 
-    res.json({
-        user,
-        today,
-        yesterday,
-        comparison: {
-            lastPlayedEqualsYesterday: user?.last_played_date === yesterday,
-            lastPlayedEqualsToday: user?.last_played_date === today,
-            lastPlayedNotToday: user?.last_played_date !== today
-        }
-    });
+        res.json({
+            user,
+            today,
+            yesterday,
+            comparison: {
+                lastPlayedEqualsYesterday: user?.last_played_date === yesterday,
+                lastPlayedEqualsToday: user?.last_played_date === today,
+                lastPlayedNotToday: user?.last_played_date !== today
+            }
+        });
+    } catch (err) {
+        next(err);
+    }
 });
 
 /**
  * Fix user streak if played today but streak is 0.
  * POST /api/games/fix-streak/:id
  */
-router.post('/fix-streak/:id', (req, res) => {
-    const db = getDb();
-    const today = new Date().toISOString().split('T')[0];
+router.post('/fix-streak/:id', async (req, res, next) => {
+    try {
+        const db = getDb();
+        const today = new Date().toISOString().split('T')[0];
 
-    // Get user before fix
-    const before = db.prepare(
-        'SELECT id, username, last_played_date, current_streak FROM users WHERE id = ?'
-    ).get(req.params.id);
+        // Get user before fix
+        const before = await db.prepare(
+            'SELECT id, username, last_played_date, current_streak FROM users WHERE id = ?'
+        ).get(req.params.id);
 
-    // If played today and streak is 0, set to 1
-    if (before && before.last_played_date === today && before.current_streak === 0) {
-        db.prepare('UPDATE users SET current_streak = 1 WHERE id = ?').run(req.params.id);
+        // If played today and streak is 0, set to 1
+        if (before && before.last_played_date === today && before.current_streak === 0) {
+            await db.prepare('UPDATE users SET current_streak = 1 WHERE id = ?').run(req.params.id);
+        }
+
+        // Get user after fix
+        const after = await db.prepare(
+            'SELECT id, username, last_played_date, current_streak FROM users WHERE id = ?'
+        ).get(req.params.id);
+
+        res.json({ before, after, today });
+    } catch (err) {
+        next(err);
     }
-
-    // Get user after fix
-    const after = db.prepare(
-        'SELECT id, username, last_played_date, current_streak FROM users WHERE id = ?'
-    ).get(req.params.id);
-
-    res.json({ before, after, today });
 });
 
 /**
  * Debug endpoint to set user streak to specific value (for testing).
  * POST /api/games/set-streak/:id
  */
-router.post('/set-streak/:id', (req, res) => {
-    const db = getDb();
-    const { streak } = req.body;
+router.post('/set-streak/:id', async (req, res, next) => {
+    try {
+        const db = getDb();
+        const { streak } = req.body;
 
-    if (typeof streak !== 'number' || streak < 0) {
-        return res.status(400).json({ error: 'Invalid streak value' });
+        if (typeof streak !== 'number' || streak < 0) {
+            return res.status(400).json({ error: 'Invalid streak value' });
+        }
+
+        // Get user before update
+        const before = await db.prepare(
+            'SELECT id, username, current_streak FROM users WHERE id = ?'
+        ).get(req.params.id);
+
+        if (!before) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Update streak
+        await db.prepare(
+            'UPDATE users SET current_streak = ? WHERE id = ?'
+        ).run(streak, req.params.id);
+
+        // Get user after update
+        const after = await db.prepare(
+            'SELECT id, username, current_streak FROM users WHERE id = ?'
+        ).get(req.params.id);
+
+        res.json({ before, after, message: `Streak set to ${streak}` });
+    } catch (err) {
+        next(err);
     }
-
-    // Get user before update
-    const before = db.prepare(
-        'SELECT id, username, current_streak FROM users WHERE id = ?'
-    ).get(req.params.id);
-
-    if (!before) {
-        return res.status(404).json({ error: 'User not found' });
-    }
-
-    // Update streak
-    db.prepare(
-        'UPDATE users SET current_streak = ? WHERE id = ?'
-    ).run(streak, req.params.id);
-
-    // Get user after update
-    const after = db.prepare(
-        'SELECT id, username, current_streak FROM users WHERE id = ?'
-    ).get(req.params.id);
-
-    res.json({ before, after, message: `Streak set to ${streak}` });
 });
 
 /**
  * Get available regions/continents for filtering.
  * GET /api/games/regions
  */
-router.get('/regions', (req, res) => {
+router.get('/regions', async (req, res, next) => {
     try {
         const db = getDb();
-        const regions = db.prepare(
+        const regions = await db.prepare(
             'SELECT DISTINCT continent FROM countries WHERE continent IS NOT NULL ORDER BY continent'
         ).all();
 
@@ -296,7 +309,7 @@ router.get('/regions', (req, res) => {
  * Get questions for a game.
  * GET /api/games/questions
  */
-router.get('/questions', optionalAuthenticate, (req, res, next) => {
+router.get('/questions', optionalAuthenticate, async (req, res, next) => {
     try {
         const { type, mode, region, count = 10, difficulty = 'medium' } = req.query;
 
@@ -314,19 +327,19 @@ router.get('/questions', optionalAuthenticate, (req, res, next) => {
 
         switch (type) {
             case 'flags':
-                questions = generateFlagQuestions(db, mode, region, questionCount, difficulty, userId);
+                questions = await generateFlagQuestions(db, mode, region, questionCount, difficulty, userId);
                 break;
             case 'capitals':
-                questions = generateCapitalQuestions(db, mode, region, questionCount, difficulty);
+                questions = await generateCapitalQuestions(db, mode, region, questionCount, difficulty);
                 break;
             case 'maps':
-                questions = generateMapQuestions(db, mode, region, questionCount, difficulty);
+                questions = await generateMapQuestions(db, mode, region, questionCount, difficulty);
                 break;
             case 'languages':
-                questions = generateLanguageQuestions(db, mode, region, questionCount, difficulty);
+                questions = await generateLanguageQuestions(db, mode, region, questionCount, difficulty);
                 break;
             case 'trivia':
-                questions = generateTriviaQuestions(db, region, questionCount, difficulty);
+                questions = await generateTriviaQuestions(db, region, questionCount, difficulty);
                 break;
             default:
                 return res.status(400).json({
@@ -344,7 +357,7 @@ router.get('/questions', optionalAuthenticate, (req, res, next) => {
  * Start a game session.
  * POST /api/games/sessions
  */
-router.post('/sessions', authenticate, (req, res) => {
+router.post('/sessions', authenticate, async (req, res, next) => {
     const { gameType, gameMode = 'solo', difficulty = 'medium', regionFilter } = req.body;
 
     if (!gameType) {
@@ -355,7 +368,7 @@ router.post('/sessions', authenticate, (req, res) => {
 
     try {
         const db = getDb();
-        const result = db.prepare(`
+        const result = await db.prepare(`
             INSERT INTO game_sessions (user_id, game_type, game_mode, difficulty_level, region_filter)
             VALUES (?, ?, ?, ?, ?)
         `).run(req.userId, gameType, gameMode, difficulty, regionFilter || null);
@@ -379,7 +392,7 @@ router.post('/sessions', authenticate, (req, res) => {
  * Uses a database transaction to ensure all-or-nothing data integrity.
  * If the user refreshes during save, either all data is saved or none.
  */
-router.patch('/sessions/:id', authenticate, gameAnswerRateLimit, (req, res, next) => {
+router.patch('/sessions/:id', authenticate, gameAnswerRateLimit, async (req, res, next) => {
     const db = getDb();
 
     try {
@@ -391,7 +404,7 @@ router.patch('/sessions/:id', authenticate, gameAnswerRateLimit, (req, res, next
         console.log('PATCH session - rawCorrectCount:', rawCorrectCount, 'calculatedCorrectCount:', correctCount);
 
         // Verify session belongs to user (before transaction)
-        const sessionFull = db.prepare(
+        const sessionFull = await db.prepare(
             'SELECT * FROM game_sessions WHERE id = ? AND user_id = ?'
         ).get(id, req.userId);
 
@@ -406,7 +419,7 @@ router.patch('/sessions/:id', authenticate, gameAnswerRateLimit, (req, res, next
         let xpCapInfo = null;
 
         if (req.userId) {
-            const xpStatus = getDailyXpStatus(db, req.userId, sessionFull.game_type);
+            const xpStatus = await getDailyXpStatus(db, req.userId, sessionFull.game_type);
             if (xpStatus.remaining < requestedXp) {
                 xpEarned = xpStatus.remaining;
                 xpCapInfo = {
@@ -422,13 +435,10 @@ router.patch('/sessions/:id', authenticate, gameAnswerRateLimit, (req, res, next
             }
         }
 
-        // Begin transaction for atomic game completion
-        // All changes will be committed together or rolled back on error
-        db.beginTransaction();
-
-        try {
+        // Use transaction for atomic game completion
+        await db.transaction(async (txDb) => {
             // Update session
-            db.prepare(`
+            await txDb.prepare(`
                 UPDATE game_sessions
                 SET score = ?, xp_earned = ?, correct_count = ?, average_time_ms = ?,
                     completed_at = CURRENT_TIMESTAMP, total_questions = ?
@@ -437,20 +447,18 @@ router.patch('/sessions/:id', authenticate, gameAnswerRateLimit, (req, res, next
 
             // Save answers
             if (answers && Array.isArray(answers)) {
-                const insertAnswer = db.prepare(`
-                    INSERT INTO game_answers (session_id, question_index, question_data_json,
-                        user_answer, correct_answer, is_correct, time_ms)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                `);
-
                 for (let i = 0; i < answers.length; i++) {
                     const answer = answers[i];
-                    insertAnswer.run(
+                    await txDb.prepare(`
+                        INSERT INTO game_answers (session_id, question_index, question_data_json,
+                            user_answer, correct_answer, is_correct, time_ms)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    `).run(
                         id, i,
                         JSON.stringify(answer.question),
                         answer.userAnswer,
                         answer.correctAnswer,
-                        answer.isCorrect ? 1 : 0,
+                        answer.isCorrect,
                         answer.timeMs
                     );
                 }
@@ -458,27 +466,20 @@ router.patch('/sessions/:id', authenticate, gameAnswerRateLimit, (req, res, next
 
             // Update user stats
             console.log('Updating stats - gameType:', sessionFull.game_type, 'correctCount:', correctCount, 'totalQuestions:', answers?.length || 10);
-            updateUserStats(db, req.userId, sessionFull.game_type, score, xpEarned, correctCount, answers?.length || 10);
+            await updateUserStats(txDb, req.userId, sessionFull.game_type, score, xpEarned, correctCount, answers?.length || 10);
 
             // Update spaced repetition data for each answered question
             if (answers && Array.isArray(answers)) {
-                updateSpacedRepetition(db, req.userId, sessionFull.game_type, answers);
+                await updateSpacedRepetition(txDb, req.userId, sessionFull.game_type, answers);
             }
+        });
 
-            // Commit transaction - all changes saved atomically
-            db.commit();
-
-            res.json({
-                message: 'Game session completed',
-                sessionId: id,
-                xpEarned,
-                xpCapInfo
-            });
-        } catch (txErr) {
-            // Rollback on any error - no partial data saved
-            db.rollback();
-            throw txErr;
-        }
+        res.json({
+            message: 'Game session completed',
+            sessionId: id,
+            xpEarned,
+            xpCapInfo
+        });
     } catch (err) {
         next(err);
     }
@@ -488,12 +489,12 @@ router.patch('/sessions/:id', authenticate, gameAnswerRateLimit, (req, res, next
  * Get game session details.
  * GET /api/games/sessions/:id
  */
-router.get('/sessions/:id', authenticate, (req, res, next) => {
+router.get('/sessions/:id', authenticate, async (req, res, next) => {
     try {
         const { id } = req.params;
         const db = getDb();
 
-        const session = db.prepare(`
+        const session = await db.prepare(`
             SELECT * FROM game_sessions WHERE id = ? AND user_id = ?
         `).get(id, req.userId);
 
@@ -503,7 +504,7 @@ router.get('/sessions/:id', authenticate, (req, res, next) => {
             });
         }
 
-        const answers = db.prepare(`
+        const answers = await db.prepare(`
             SELECT * FROM game_answers WHERE session_id = ? ORDER BY question_index
         `).all(id);
 
@@ -523,13 +524,13 @@ router.get('/sessions/:id', authenticate, (req, res, next) => {
  * GET /api/games/sessions
  * Get recent game sessions for the authenticated user.
  */
-router.get('/sessions', authenticate, (req, res, next) => {
+router.get('/sessions', authenticate, async (req, res, next) => {
     try {
         const db = getDb();
         const limit = Math.min(parseInt(req.query.limit) || 10, 50);
         const offset = parseInt(req.query.offset) || 0;
 
-        const sessions = db.prepare(`
+        const sessions = await db.prepare(`
             SELECT
                 id,
                 game_type,
@@ -548,7 +549,7 @@ router.get('/sessions', authenticate, (req, res, next) => {
             LIMIT ? OFFSET ?
         `).all(req.userId, limit, offset);
 
-        const totalCount = db.prepare(`
+        const totalCount = await db.prepare(`
             SELECT COUNT(*) as count FROM game_sessions
             WHERE user_id = ? AND completed_at IS NOT NULL
         `).get(req.userId);
@@ -575,13 +576,13 @@ router.get('/sessions', authenticate, (req, res, next) => {
  * Medium = mix of countries
  * Hard = obscure countries (low population)
  *
- * @param {Database} db - Database instance
+ * @param {object} db - Database instance
  * @param {string} difficulty - Difficulty level (easy, medium, hard)
- * @returns {object} Population filter criteria { minPop, maxPop, orderBy }
+ * @returns {Promise<object>} Population filter criteria { minPop, maxPop, orderBy }
  */
-function getDifficultyFilter(db, difficulty) {
+async function getDifficultyFilter(db, difficulty) {
     // Get population statistics for thresholds
-    const stats = db.prepare(`
+    const stats = await db.prepare(`
         SELECT
             MAX(population) as maxPop,
             MIN(population) as minPop,
@@ -612,16 +613,16 @@ function getDifficultyFilter(db, difficulty) {
 /**
  * Generate flag questions with spaced repetition prioritization.
  *
- * @param {Database} db - Database instance
+ * @param {object} db - Database instance
  * @param {string} mode - Question mode
  * @param {string} region - Region filter
  * @param {number} count - Number of questions
  * @param {string} difficulty - Difficulty level
  * @param {number|null} userId - User ID for spaced repetition (null if not logged in)
- * @returns {Array} Array of questions
+ * @returns {Promise<Array>} Array of questions
  */
-function generateFlagQuestions(db, mode, region, count, difficulty, userId = null) {
-    const diffFilter = getDifficultyFilter(db, difficulty);
+async function generateFlagQuestions(db, mode, region, count, difficulty, userId = null) {
+    const diffFilter = await getDifficultyFilter(db, difficulty);
     let countries = [];
 
     // If user is logged in, prioritize due review items
@@ -649,7 +650,7 @@ function generateFlagQuestions(db, mode, region, count, difficulty, userId = nul
         dueQuery += ' ORDER BY ufp.times_wrong DESC, ufp.next_review_at ASC LIMIT ?';
         dueParams.push(Math.ceil(count / 2)); // Get up to half from due items
 
-        const dueCountries = db.prepare(dueQuery).all(...dueParams);
+        const dueCountries = await db.prepare(dueQuery).all(...dueParams);
         countries = [...dueCountries];
     }
 
@@ -687,7 +688,7 @@ function generateFlagQuestions(db, mode, region, count, difficulty, userId = nul
         query += ` ORDER BY ${diffFilter.orderBy} LIMIT ?`;
         params.push(remaining);
 
-        const additionalCountries = db.prepare(query).all(...params);
+        const additionalCountries = await db.prepare(query).all(...params);
         countries = [...countries, ...additionalCountries];
     }
 
@@ -695,7 +696,7 @@ function generateFlagQuestions(db, mode, region, count, difficulty, userId = nul
     countries = countries.sort(() => Math.random() - 0.5);
 
     // Get all countries for wrong answers
-    const allCountries = db.prepare(`
+    const allCountries = await db.prepare(`
         SELECT c.id, c.name, c.code, f.image_url
         FROM countries c
         JOIN flags f ON f.country_id = c.id
@@ -725,15 +726,15 @@ function generateFlagQuestions(db, mode, region, count, difficulty, userId = nul
 /**
  * Generate capital questions.
  *
- * @param {Database} db - Database instance
+ * @param {object} db - Database instance
  * @param {string} mode - Question mode
  * @param {string} region - Region filter
  * @param {number} count - Number of questions
  * @param {string} difficulty - Difficulty level
- * @returns {Array} Array of questions
+ * @returns {Promise<Array>} Array of questions
  */
-function generateCapitalQuestions(db, mode, region, count, difficulty) {
-    const diffFilter = getDifficultyFilter(db, difficulty);
+async function generateCapitalQuestions(db, mode, region, count, difficulty) {
+    const diffFilter = await getDifficultyFilter(db, difficulty);
 
     let query = `
         SELECT c.id, c.name as country, c.population, cap.name as capital
@@ -761,10 +762,10 @@ function generateCapitalQuestions(db, mode, region, count, difficulty) {
     query += ` ORDER BY ${diffFilter.orderBy} LIMIT ?`;
     params.push(count);
 
-    const data = db.prepare(query).all(...params);
+    const data = await db.prepare(query).all(...params);
 
     // Get all for wrong answers
-    const allData = db.prepare(`
+    const allData = await db.prepare(`
         SELECT c.id, c.name as country, cap.name as capital
         FROM countries c
         JOIN capitals cap ON cap.country_id = c.id
@@ -794,15 +795,15 @@ function generateCapitalQuestions(db, mode, region, count, difficulty) {
 /**
  * Generate map questions.
  *
- * @param {Database} db - Database instance
+ * @param {object} db - Database instance
  * @param {string} mode - Question mode
  * @param {string} region - Region filter
  * @param {number} count - Number of questions
  * @param {string} difficulty - Difficulty level
- * @returns {Array} Array of questions
+ * @returns {Promise<Array>} Array of questions
  */
-function generateMapQuestions(db, mode, region, count, difficulty) {
-    const diffFilter = getDifficultyFilter(db, difficulty);
+async function generateMapQuestions(db, mode, region, count, difficulty) {
+    const diffFilter = await getDifficultyFilter(db, difficulty);
 
     let query = 'SELECT id, name, code, continent, population FROM countries WHERE population IS NOT NULL';
     const params = [];
@@ -825,10 +826,10 @@ function generateMapQuestions(db, mode, region, count, difficulty) {
     query += ` ORDER BY ${diffFilter.orderBy.replace('c.', '')} LIMIT ?`;
     params.push(count);
 
-    const countries = db.prepare(query).all(...params);
+    const countries = await db.prepare(query).all(...params);
 
     // Get all countries for wrong answers
-    const allCountries = db.prepare('SELECT id, name, code FROM countries').all();
+    const allCountries = await db.prepare('SELECT id, name, code FROM countries').all();
 
     return countries.map(country => {
         // Generate wrong answers from other countries
@@ -858,17 +859,17 @@ function generateMapQuestions(db, mode, region, count, difficulty) {
 /**
  * Generate language questions.
  *
- * @param {Database} db - Database instance
+ * @param {object} db - Database instance
  * @param {string} mode - Question mode
  * @param {string} region - Region filter
  * @param {number} count - Number of questions
  * @param {string} difficulty - Difficulty level
- * @returns {Array} Array of questions
+ * @returns {Promise<Array>} Array of questions
  */
-function generateLanguageQuestions(db, mode, region, count, difficulty) {
-    const diffFilter = getDifficultyFilter(db, difficulty);
+async function generateLanguageQuestions(db, mode, region, count, difficulty) {
+    const diffFilter = await getDifficultyFilter(db, difficulty);
     // Get all languages for generating wrong answers
-    const allLanguages = db.prepare('SELECT id, name FROM languages').all();
+    const allLanguages = await db.prepare('SELECT id, name FROM languages').all();
 
     if (mode === 'language-to-countries') {
         // Show a language, user picks which country speaks it
@@ -900,10 +901,10 @@ function generateLanguageQuestions(db, mode, region, count, difficulty) {
         query += ` ORDER BY ${diffFilter.orderBy} LIMIT ?`;
         params.push(count);
 
-        const data = db.prepare(query).all(...params);
+        const data = await db.prepare(query).all(...params);
 
         // Get all countries for wrong answers
-        const allCountries = db.prepare('SELECT id, name FROM countries').all();
+        const allCountries = await db.prepare('SELECT id, name FROM countries').all();
 
         return data.map(item => {
             const wrongAnswers = allCountries
@@ -959,7 +960,7 @@ function generateLanguageQuestions(db, mode, region, count, difficulty) {
         query += ` GROUP BY c.id ORDER BY ${diffFilter.orderBy} LIMIT ?`;
         params.push(count);
 
-        const data = db.prepare(query).all(...params);
+        const data = await db.prepare(query).all(...params);
 
         return data.map(item => {
             // Get wrong language answers
@@ -989,13 +990,13 @@ function generateLanguageQuestions(db, mode, region, count, difficulty) {
 /**
  * Generate trivia questions.
  *
- * @param {Database} db - Database instance
+ * @param {object} db - Database instance
  * @param {string} region - Region filter
  * @param {number} count - Number of questions
  * @param {string} difficulty - Difficulty level
- * @returns {Array} Array of questions
+ * @returns {Promise<Array>} Array of questions
  */
-function generateTriviaQuestions(db, region, count, difficulty) {
+async function generateTriviaQuestions(db, region, count, difficulty) {
     let query = 'SELECT * FROM trivia_facts';
     const params = [];
 
@@ -1013,10 +1014,10 @@ function generateTriviaQuestions(db, region, count, difficulty) {
     query += ' ORDER BY RANDOM() LIMIT ?';
     params.push(count);
 
-    const facts = db.prepare(query).all(...params);
+    const facts = await db.prepare(query).all(...params);
 
     // Get all trivia facts for generating wrong answers
-    const allFacts = db.prepare('SELECT DISTINCT answer FROM trivia_facts').all();
+    const allFacts = await db.prepare('SELECT DISTINCT answer FROM trivia_facts').all();
 
     return facts.map(fact => {
         // Generate wrong answers from other trivia answers
@@ -1042,7 +1043,7 @@ function generateTriviaQuestions(db, region, count, difficulty) {
 /**
  * Update user statistics after game completion.
  *
- * @param {Database} db - Database instance
+ * @param {object} db - Database instance (or transaction client wrapper)
  * @param {number} userId - User ID
  * @param {string} gameType - Type of game played
  * @param {number} score - Score achieved
@@ -1050,9 +1051,9 @@ function generateTriviaQuestions(db, region, count, difficulty) {
  * @param {number} correctCount - Number of correct answers
  * @param {number} totalQuestions - Total questions
  */
-function updateUserStats(db, userId, gameType, score, xpEarned, correctCount, totalQuestions) {
+async function updateUserStats(db, userId, gameType, score, xpEarned, correctCount, totalQuestions) {
     // Update category stats
-    db.prepare(`
+    await db.prepare(`
         UPDATE user_category_stats
         SET xp = xp + ?,
             games_played = games_played + 1,
@@ -1064,7 +1065,7 @@ function updateUserStats(db, userId, gameType, score, xpEarned, correctCount, to
     `).run(xpEarned, correctCount, totalQuestions, score, score, userId, gameType);
 
     // Get user's last played date BEFORE updating (for streak calculation)
-    const user = db.prepare(
+    const user = await db.prepare(
         'SELECT last_played_date, current_streak FROM users WHERE id = ?'
     ).get(userId);
 
@@ -1072,7 +1073,7 @@ function updateUserStats(db, userId, gameType, score, xpEarned, correctCount, to
     const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
 
     // Update overall user stats
-    db.prepare(`
+    await db.prepare(`
         UPDATE users
         SET overall_xp = overall_xp + ?,
             overall_level = (overall_xp + ?) / 1000 + 1,
@@ -1084,7 +1085,7 @@ function updateUserStats(db, userId, gameType, score, xpEarned, correctCount, to
     // Update streak based on the PREVIOUS last_played_date
     if (user.last_played_date === yesterday) {
         // Played yesterday, increment streak
-        db.prepare(`
+        await db.prepare(`
             UPDATE users
             SET current_streak = current_streak + 1,
                 longest_streak = CASE
@@ -1096,30 +1097,30 @@ function updateUserStats(db, userId, gameType, score, xpEarned, correctCount, to
         `).run(userId);
     } else if (user.last_played_date !== today) {
         // Didn't play yesterday or today, start new streak
-        db.prepare('UPDATE users SET current_streak = 1 WHERE id = ?').run(userId);
+        await db.prepare('UPDATE users SET current_streak = 1 WHERE id = ?').run(userId);
     } else if (user.last_played_date === today && user.current_streak === 0) {
         // Fix for users who played today but have streak = 0 (legacy bug)
-        db.prepare('UPDATE users SET current_streak = 1 WHERE id = ?').run(userId);
+        await db.prepare('UPDATE users SET current_streak = 1 WHERE id = ?').run(userId);
     }
     // If already played today with streak > 0, don't change streak
 
     // Update achievement progress
     try {
-        updateAchievementProgress(db, userId, gameType, correctCount, totalQuestions, score);
+        await updateAchievementProgress(db, userId, gameType, correctCount, totalQuestions, score);
     } catch (achErr) {
         console.error('ERROR in updateAchievementProgress:', achErr);
     }
 
     // Update daily challenge progress
     try {
-        updateDailyChallengeProgress(db, userId, gameType, correctCount, totalQuestions);
+        await updateDailyChallengeProgress(db, userId, gameType, correctCount, totalQuestions);
     } catch (challengeErr) {
         console.error('ERROR in updateDailyChallengeProgress:', challengeErr);
     }
 
     // Check if this score beats any friend's high score and notify them
     try {
-        notifyFriendsOfBeatenScore(db, userId, gameType, score);
+        await notifyFriendsOfBeatenScore(db, userId, gameType, score);
     } catch (notifyErr) {
         console.error('ERROR in notifyFriendsOfBeatenScore:', notifyErr);
     }
@@ -1135,15 +1136,15 @@ function updateUserStats(db, userId, gameType, score, xpEarned, correctCount, to
  * @param {number} totalQuestions - Total questions
  * @param {number} score - Score achieved
  */
-function updateAchievementProgress(db, userId, gameType, correctCount, totalQuestions, score) {
+async function updateAchievementProgress(db, userId, gameType, correctCount, totalQuestions, score) {
     console.log('updateAchievementProgress called - gameType:', gameType, 'correctCount:', correctCount);
     // Get all achievements
-    const achievements = db.prepare('SELECT * FROM achievements').all();
+    const achievements = await db.prepare('SELECT * FROM achievements').all();
     console.log('Found achievements:', achievements.length);
 
     // For correct_count achievements, sync with actual total_correct from stats
     // This ensures progress is always accurate
-    const userStats = db.prepare(
+    const userStats = await db.prepare(
         'SELECT category, total_correct, games_played FROM user_category_stats WHERE user_id = ?'
     ).all(userId);
     const statsMap = {};
@@ -1210,7 +1211,7 @@ function updateAchievementProgress(db, userId, gameType, correctCount, totalQues
 
         // Handle absolute progress (sync with stats) or incremental progress
         if (absoluteProgress !== null || progressIncrement > 0) {
-            const existing = db.prepare(
+            const existing = await db.prepare(
                 'SELECT * FROM user_achievements WHERE user_id = ? AND achievement_id = ?'
             ).get(userId, achievement.id);
 
@@ -1233,7 +1234,7 @@ function updateAchievementProgress(db, userId, gameType, correctCount, totalQues
             const justUnlocked = unlocked && !wasAlreadyUnlocked;
 
             if (existing) {
-                db.prepare(`
+                await db.prepare(`
                     UPDATE user_achievements
                     SET progress = ?,
                         unlocked_at = CASE
@@ -1243,7 +1244,7 @@ function updateAchievementProgress(db, userId, gameType, correctCount, totalQues
                     WHERE user_id = ? AND achievement_id = ?
                 `).run(newProgress, unlocked ? 1 : 0, userId, achievement.id);
             } else {
-                db.prepare(`
+                await db.prepare(`
                     INSERT INTO user_achievements (user_id, achievement_id, progress, unlocked_at)
                     VALUES (?, ?, ?, ?)
                 `).run(
@@ -1256,7 +1257,7 @@ function updateAchievementProgress(db, userId, gameType, correctCount, totalQues
 
             // Create notification for newly unlocked achievement
             if (justUnlocked) {
-                db.prepare(`
+                await db.prepare(`
                     INSERT INTO notifications (user_id, type, title, body, data_json)
                     VALUES (?, 'achievement_unlock', ?, ?, ?)
                 `).run(
@@ -1268,7 +1269,7 @@ function updateAchievementProgress(db, userId, gameType, correctCount, totalQues
                 console.log('Achievement unlocked notification created:', achievement.name);
 
                 // Create activity feed entry for friends to see
-                db.prepare(`
+                await db.prepare(`
                     INSERT INTO activity_feed (user_id, activity_type, data_json)
                     VALUES (?, 'achievement_unlocked', ?)
                 `).run(
@@ -1296,7 +1297,7 @@ function updateAchievementProgress(db, userId, gameType, correctCount, totalQues
  * @param {number} correctCount - Number of correct answers
  * @param {number} totalQuestions - Total questions
  */
-function updateDailyChallengeProgress(db, userId, gameType, correctCount, totalQuestions) {
+async function updateDailyChallengeProgress(db, userId, gameType, correctCount, totalQuestions) {
     // Get today's date in multiple formats to handle timezone differences
     // This handles the case where the client created challenges in their timezone
     // but the server is running in a different timezone
@@ -1308,9 +1309,9 @@ function updateDailyChallengeProgress(db, userId, gameType, correctCount, totalQ
     const tomorrow = new Date(now.getTime() + 86400000).toISOString().split('T')[0];
 
     // Get all recent incomplete challenges for this user (within 1 day range)
-    const challenges = db.prepare(`
+    const challenges = await db.prepare(`
         SELECT * FROM daily_challenges
-        WHERE user_id = ? AND date IN (?, ?, ?) AND is_completed = 0
+        WHERE user_id = ? AND date IN (?, ?, ?) AND is_completed = false
     `).all(userId, utcDate, yesterday, tomorrow);
 
     console.log('Found', challenges.length, 'incomplete challenges for user', userId);
@@ -1359,15 +1360,15 @@ function updateDailyChallengeProgress(db, userId, gameType, correctCount, totalQ
 
             console.log(`Challenge ${challenge.challenge_type}: ${challenge.current_value} + ${increment} = ${newValue} (completed: ${isCompleted})`);
 
-            db.prepare(`
+            await db.prepare(`
                 UPDATE daily_challenges
                 SET current_value = ?, is_completed = ?
                 WHERE id = ?
-            `).run(newValue, isCompleted ? 1 : 0, challenge.id);
+            `).run(newValue, isCompleted, challenge.id);
 
             // Award XP if completed
             if (isCompleted) {
-                db.prepare(`
+                await db.prepare(`
                     UPDATE users
                     SET overall_xp = overall_xp + ?
                     WHERE id = ?
@@ -1376,7 +1377,7 @@ function updateDailyChallengeProgress(db, userId, gameType, correctCount, totalQ
                 console.log(`Awarded ${challenge.xp_reward} XP for completing challenge`);
 
                 // Create notification
-                db.prepare(`
+                await db.prepare(`
                     INSERT INTO notifications (user_id, type, title, body)
                     VALUES (?, 'challenge_complete', 'Challenge Complete!', ?)
                 `).run(userId, `You earned ${challenge.xp_reward} XP for completing "${challenge.challenge_type}"!`);
@@ -1393,13 +1394,13 @@ function updateDailyChallengeProgress(db, userId, gameType, correctCount, totalQ
  * @param {string} gameType - Type of game played
  * @param {number} score - Score achieved
  */
-function notifyFriendsOfBeatenScore(db, userId, gameType, score) {
+async function notifyFriendsOfBeatenScore(db, userId, gameType, score) {
     // Get the user's username
-    const user = db.prepare('SELECT username FROM users WHERE id = ?').get(userId);
+    const user = await db.prepare('SELECT username FROM users WHERE id = ?').get(userId);
     if (!user) return;
 
     // Get all friends
-    const friends = db.prepare(`
+    const friends = await db.prepare(`
         SELECT DISTINCT
             CASE WHEN user_id = ? THEN friend_id ELSE user_id END as friend_id
         FROM friendships
@@ -1408,14 +1409,14 @@ function notifyFriendsOfBeatenScore(db, userId, gameType, score) {
 
     for (const friend of friends) {
         // Get friend's high score for this game type
-        const friendStats = db.prepare(`
+        const friendStats = await db.prepare(`
             SELECT high_score FROM user_category_stats
             WHERE user_id = ? AND category = ?
         `).get(friend.friend_id, gameType);
 
         // If user's score beats friend's high score, notify the friend
         if (friendStats && score > friendStats.high_score && friendStats.high_score > 0) {
-            db.prepare(`
+            await db.prepare(`
                 INSERT INTO notifications (user_id, type, title, body, data_json)
                 VALUES (?, 'score_beaten', 'High Score Beaten!', ?, ?)
             `).run(
@@ -1443,7 +1444,7 @@ function notifyFriendsOfBeatenScore(db, userId, gameType, score) {
  * @param {string} gameType - Type of game (flags, capitals, etc.)
  * @param {Array} answers - Array of answer objects with question data and correctness
  */
-function updateSpacedRepetition(db, userId, gameType, answers) {
+async function updateSpacedRepetition(db, userId, gameType, answers) {
     const now = new Date().toISOString();
 
     for (const answer of answers) {
@@ -1457,7 +1458,7 @@ function updateSpacedRepetition(db, userId, gameType, answers) {
         const factType = gameType; // flags, capitals, maps, languages, trivia
 
         // Check if progress exists for this fact
-        const existing = db.prepare(`
+        const existing = await db.prepare(`
             SELECT * FROM user_fact_progress
             WHERE user_id = ? AND fact_type = ? AND fact_id = ?
         `).get(userId, factType, factId);
@@ -1491,7 +1492,7 @@ function updateSpacedRepetition(db, userId, gameType, answers) {
             const successRate = times_correct / times_seen;
             const masteryLevel = Math.min(Math.floor(successRate * 6), 5);
 
-            db.prepare(`
+            await db.prepare(`
                 UPDATE user_fact_progress
                 SET times_seen = ?, times_correct = ?, times_wrong = ?,
                     last_seen_at = ?, next_review_at = ?,
@@ -1507,11 +1508,11 @@ function updateSpacedRepetition(db, userId, gameType, answers) {
             // Create new progress record
             const isCorrect = answer.isCorrect;
             const initialEase = 2.5;
-            const initialInterval = isCorrect ? 1 : 1; // Start at 1 day regardless
+            const initialInterval = 1; // Start at 1 day regardless
             const nextReview = new Date();
             nextReview.setDate(nextReview.getDate() + initialInterval);
 
-            db.prepare(`
+            await db.prepare(`
                 INSERT INTO user_fact_progress
                 (user_id, fact_type, fact_id, times_seen, times_correct, times_wrong,
                  last_seen_at, next_review_at, ease_factor, interval_days, mastery_level)
@@ -1528,5 +1529,3 @@ function updateSpacedRepetition(db, userId, gameType, answers) {
 }
 
 export default router;
-// reload
-// trigger

@@ -8,7 +8,7 @@ const router = Router();
  * Send challenge to a friend.
  * POST /api/multiplayer/challenge
  */
-router.post('/challenge', authenticate, (req, res, next) => {
+router.post('/challenge', authenticate, async (req, res, next) => {
     try {
         const { opponentId, gameType } = req.body;
 
@@ -21,7 +21,7 @@ router.post('/challenge', authenticate, (req, res, next) => {
         const db = getDb();
 
         // Verify opponent is a friend
-        const friendship = db.prepare(`
+        const friendship = await db.prepare(`
             SELECT * FROM friendships
             WHERE ((user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?))
             AND status = 'accepted'
@@ -34,17 +34,17 @@ router.post('/challenge', authenticate, (req, res, next) => {
         }
 
         // Create match
-        const result = db.prepare(`
+        const result = await db.prepare(`
             INSERT INTO multiplayer_matches (challenger_id, opponent_id, game_type)
             VALUES (?, ?, ?)
         `).run(req.userId, opponentId, gameType);
 
         // Create notification for opponent
-        const challenger = db.prepare(
+        const challenger = await db.prepare(
             'SELECT username FROM users WHERE id = ?'
         ).get(req.userId);
 
-        db.prepare(`
+        await db.prepare(`
             INSERT INTO notifications (user_id, type, title, body, data_json)
             VALUES (?, 'match_invite', 'Match Invite', ?, ?)
         `).run(
@@ -66,11 +66,11 @@ router.post('/challenge', authenticate, (req, res, next) => {
  * Get pending invites.
  * GET /api/multiplayer/invites
  */
-router.get('/invites', authenticate, (req, res, next) => {
+router.get('/invites', authenticate, async (req, res, next) => {
     try {
         const db = getDb();
 
-        const invites = db.prepare(`
+        const invites = await db.prepare(`
             SELECT m.*, u.username as challenger_name, u.avatar_url as challenger_avatar
             FROM multiplayer_matches m
             JOIN users u ON u.id = m.challenger_id
@@ -88,12 +88,12 @@ router.get('/invites', authenticate, (req, res, next) => {
  * Accept match invite.
  * POST /api/multiplayer/invites/:id/accept
  */
-router.post('/invites/:id/accept', authenticate, (req, res, next) => {
+router.post('/invites/:id/accept', authenticate, async (req, res, next) => {
     try {
         const { id } = req.params;
         const db = getDb();
 
-        const match = db.prepare(`
+        const match = await db.prepare(`
             SELECT * FROM multiplayer_matches
             WHERE id = ? AND opponent_id = ? AND status = 'pending'
         `).get(id, req.userId);
@@ -104,14 +104,14 @@ router.post('/invites/:id/accept', authenticate, (req, res, next) => {
             });
         }
 
-        db.prepare(`
+        await db.prepare(`
             UPDATE multiplayer_matches
             SET status = 'active', started_at = CURRENT_TIMESTAMP
             WHERE id = ?
         `).run(id);
 
         // Notify challenger
-        db.prepare(`
+        await db.prepare(`
             INSERT INTO notifications (user_id, type, title, body, data_json)
             VALUES (?, 'match_accepted', 'Match Accepted', ?, ?)
         `).run(
@@ -130,12 +130,12 @@ router.post('/invites/:id/accept', authenticate, (req, res, next) => {
  * Decline match invite.
  * POST /api/multiplayer/invites/:id/decline
  */
-router.post('/invites/:id/decline', authenticate, (req, res, next) => {
+router.post('/invites/:id/decline', authenticate, async (req, res, next) => {
     try {
         const { id } = req.params;
         const db = getDb();
 
-        const result = db.prepare(`
+        const result = await db.prepare(`
             UPDATE multiplayer_matches
             SET status = 'cancelled'
             WHERE id = ? AND opponent_id = ? AND status = 'pending'
@@ -157,12 +157,12 @@ router.post('/invites/:id/decline', authenticate, (req, res, next) => {
  * Get match details.
  * GET /api/multiplayer/matches/:id
  */
-router.get('/matches/:id', authenticate, (req, res, next) => {
+router.get('/matches/:id', authenticate, async (req, res, next) => {
     try {
         const { id } = req.params;
         const db = getDb();
 
-        const match = db.prepare(`
+        const match = await db.prepare(`
             SELECT m.*,
                    c.username as challenger_name, c.avatar_url as challenger_avatar,
                    o.username as opponent_name, o.avatar_url as opponent_avatar
@@ -181,7 +181,7 @@ router.get('/matches/:id', authenticate, (req, res, next) => {
         // Get answers if match is completed
         let answers = [];
         if (match.status === 'completed') {
-            answers = db.prepare(`
+            answers = await db.prepare(`
                 SELECT * FROM multiplayer_answers
                 WHERE match_id = ?
                 ORDER BY question_index, user_id
@@ -204,11 +204,11 @@ router.get('/matches/:id', authenticate, (req, res, next) => {
  * Get match history for the current user.
  * GET /api/multiplayer/history
  */
-router.get('/history', authenticate, (req, res, next) => {
+router.get('/history', authenticate, async (req, res, next) => {
     try {
         const db = getDb();
 
-        const matches = db.prepare(`
+        const matches = await db.prepare(`
             SELECT m.*,
                    c.username as challenger_name, c.avatar_url as challenger_avatar,
                    o.username as opponent_name, o.avatar_url as opponent_avatar,

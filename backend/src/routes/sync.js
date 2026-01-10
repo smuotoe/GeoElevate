@@ -8,7 +8,7 @@ const router = Router();
  * Sync offline data.
  * POST /api/sync/offline-data
  */
-router.post('/offline-data', authenticate, (req, res, next) => {
+router.post('/offline-data', authenticate, async (req, res, next) => {
     try {
         const { gameSessions = [] } = req.body;
         const db = getDb();
@@ -19,14 +19,14 @@ router.post('/offline-data', authenticate, (req, res, next) => {
         for (const session of gameSessions) {
             try {
                 // Insert game session
-                const result = db.prepare(`
+                const result = await db.prepare(`
                     INSERT INTO game_sessions (
                         user_id, game_type, game_mode, score, xp_earned,
                         correct_count, total_questions, average_time_ms,
                         started_at, completed_at, difficulty_level, region_filter,
                         is_offline_sync
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, true)
                 `).run(
                     req.userId,
                     session.gameType,
@@ -46,29 +46,27 @@ router.post('/offline-data', authenticate, (req, res, next) => {
 
                 // Insert answers
                 if (session.answers && Array.isArray(session.answers)) {
-                    const insertAnswer = db.prepare(`
-                        INSERT INTO game_answers (
-                            session_id, question_index, question_data_json,
-                            user_answer, correct_answer, is_correct, time_ms
-                        )
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                    `);
-
                     for (let i = 0; i < session.answers.length; i++) {
                         const answer = session.answers[i];
-                        insertAnswer.run(
+                        await db.prepare(`
+                            INSERT INTO game_answers (
+                                session_id, question_index, question_data_json,
+                                user_answer, correct_answer, is_correct, time_ms
+                            )
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        `).run(
                             sessionId, i,
                             JSON.stringify(answer.question),
                             answer.userAnswer,
                             answer.correctAnswer,
-                            answer.isCorrect ? 1 : 0,
+                            answer.isCorrect,
                             answer.timeMs
                         );
                     }
                 }
 
                 // Update user stats
-                updateUserStatsFromSync(db, req.userId, session);
+                await updateUserStatsFromSync(db, req.userId, session);
 
                 synced.push({
                     localId: session.localId,
@@ -95,13 +93,13 @@ router.post('/offline-data', authenticate, (req, res, next) => {
 /**
  * Update user statistics from synced session.
  *
- * @param {Database} db - Database instance
+ * @param {object} db - Database instance
  * @param {number} userId - User ID
  * @param {object} session - Game session data
  */
-function updateUserStatsFromSync(db, userId, session) {
+async function updateUserStatsFromSync(db, userId, session) {
     // Update category stats
-    db.prepare(`
+    await db.prepare(`
         UPDATE user_category_stats
         SET xp = xp + ?,
             games_played = games_played + 1,
@@ -121,7 +119,7 @@ function updateUserStatsFromSync(db, userId, session) {
     );
 
     // Update overall user stats
-    db.prepare(`
+    await db.prepare(`
         UPDATE users
         SET overall_xp = overall_xp + ?,
             overall_level = (overall_xp + ?) / 1000 + 1,

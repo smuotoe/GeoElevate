@@ -8,11 +8,11 @@ const router = Router();
  * Get all achievements.
  * GET /api/achievements
  */
-router.get('/', optionalAuthenticate, (req, res, next) => {
+router.get('/', optionalAuthenticate, async (req, res, next) => {
     try {
         const db = getDb();
 
-        const achievements = db.prepare(`
+        const achievements = await db.prepare(`
             SELECT * FROM achievements ORDER BY category, requirement_value
         `).all();
 
@@ -26,12 +26,12 @@ router.get('/', optionalAuthenticate, (req, res, next) => {
  * Get user's achievements with progress.
  * GET /api/achievements/user/:userId
  */
-router.get('/user/:userId', authenticate, (req, res, next) => {
+router.get('/user/:userId', authenticate, async (req, res, next) => {
     try {
         const { userId } = req.params;
         const db = getDb();
 
-        const achievements = db.prepare(`
+        const achievements = await db.prepare(`
             SELECT a.*, ua.progress, ua.unlocked_at
             FROM achievements a
             LEFT JOIN user_achievements ua ON ua.achievement_id = a.id AND ua.user_id = ?
@@ -55,13 +55,13 @@ router.get('/user/:userId', authenticate, (req, res, next) => {
  * POST /api/achievements/sync
  * This fixes any desync between achievement progress and actual user stats.
  */
-router.post('/sync', authenticate, (req, res, next) => {
+router.post('/sync', authenticate, async (req, res, next) => {
     try {
         const db = getDb();
         const userId = req.userId;
 
         // Get user's category stats
-        const stats = db.prepare(
+        const stats = await db.prepare(
             'SELECT category, total_correct, games_played FROM user_category_stats WHERE user_id = ?'
         ).all(userId);
 
@@ -71,7 +71,7 @@ router.post('/sync', authenticate, (req, res, next) => {
         }
 
         // Get all achievements
-        const achievements = db.prepare('SELECT * FROM achievements').all();
+        const achievements = await db.prepare('SELECT * FROM achievements').all();
 
         let synced = 0;
         for (const achievement of achievements) {
@@ -93,7 +93,7 @@ router.post('/sync', authenticate, (req, res, next) => {
             }
 
             if (correctProgress !== null) {
-                const existing = db.prepare(
+                const existing = await db.prepare(
                     'SELECT * FROM user_achievements WHERE user_id = ? AND achievement_id = ?'
                 ).get(userId, achievement.id);
 
@@ -101,7 +101,7 @@ router.post('/sync', authenticate, (req, res, next) => {
 
                 if (existing) {
                     if (existing.progress !== correctProgress) {
-                        db.prepare(`
+                        await db.prepare(`
                             UPDATE user_achievements
                             SET progress = ?,
                                 unlocked_at = CASE
@@ -113,7 +113,7 @@ router.post('/sync', authenticate, (req, res, next) => {
                         synced++;
                     }
                 } else if (correctProgress > 0) {
-                    db.prepare(`
+                    await db.prepare(`
                         INSERT INTO user_achievements (user_id, achievement_id, progress, unlocked_at)
                         VALUES (?, ?, ?, ?)
                     `).run(userId, achievement.id, correctProgress, unlocked ? new Date().toISOString() : null);

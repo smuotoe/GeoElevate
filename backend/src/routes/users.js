@@ -20,12 +20,12 @@ const AVATARS_DIR = path.join(__dirname, '../../public/avatars');
  * Get user by ID.
  * GET /api/users/:id
  */
-router.get('/:id', authenticate, (req, res, next) => {
+router.get('/:id', authenticate, async (req, res, next) => {
     try {
         const { id } = req.params;
         const db = getDb();
 
-        const user = db.prepare(`
+        const user = await db.prepare(`
             SELECT id, username, avatar_url, overall_xp, overall_level,
                    current_streak, longest_streak, created_at, updated_at
             FROM users WHERE id = ?
@@ -51,7 +51,7 @@ router.get('/:id', authenticate, (req, res, next) => {
  * If provided, the update will only succeed if the record hasn't been
  * modified since that timestamp.
  */
-router.patch('/:id', authenticate, (req, res, next) => {
+router.patch('/:id', authenticate, async (req, res, next) => {
     try {
         const { id } = req.params;
 
@@ -67,7 +67,7 @@ router.patch('/:id', authenticate, (req, res, next) => {
 
         // Check for concurrent modification if expected_updated_at is provided
         if (expected_updated_at) {
-            const current = db.prepare(
+            const current = await db.prepare(
                 'SELECT updated_at FROM users WHERE id = ?'
             ).get(id);
 
@@ -103,9 +103,9 @@ router.patch('/:id', authenticate, (req, res, next) => {
         updates.push('updated_at = CURRENT_TIMESTAMP');
         values.push(id);
 
-        db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+        await db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...values);
 
-        const user = db.prepare(
+        const user = await db.prepare(
             'SELECT id, username, avatar_url, updated_at FROM users WHERE id = ?'
         ).get(id);
 
@@ -138,7 +138,7 @@ router.delete('/:id', authenticate, async (req, res, next) => {
         }
 
         const db = getDb();
-        const user = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(id);
+        const user = await db.prepare('SELECT password_hash FROM users WHERE id = ?').get(id);
 
         if (!user) {
             return res.status(404).json({
@@ -156,7 +156,7 @@ router.delete('/:id', authenticate, async (req, res, next) => {
         }
 
         // Delete user (cascades to related tables)
-        db.prepare('DELETE FROM users WHERE id = ?').run(id);
+        await db.prepare('DELETE FROM users WHERE id = ?').run(id);
 
         res.json({ message: 'Account deleted successfully' });
     } catch (err) {
@@ -168,18 +168,18 @@ router.delete('/:id', authenticate, async (req, res, next) => {
  * Get user stats.
  * GET /api/users/:id/stats
  */
-router.get('/:id/stats', authenticate, (req, res, next) => {
+router.get('/:id/stats', authenticate, async (req, res, next) => {
     try {
         const { id } = req.params;
         const db = getDb();
 
-        const stats = db.prepare(`
+        const stats = await db.prepare(`
             SELECT category, xp, level, games_played, total_correct, total_questions,
                    high_score, average_time_ms
             FROM user_category_stats WHERE user_id = ?
         `).all(id);
 
-        const overall = db.prepare(`
+        const overall = await db.prepare(`
             SELECT overall_xp, overall_level, current_streak, longest_streak
             FROM users WHERE id = ?
         `).get(id);
@@ -194,12 +194,12 @@ router.get('/:id/stats', authenticate, (req, res, next) => {
  * Get user achievements.
  * GET /api/users/:id/achievements
  */
-router.get('/:id/achievements', authenticate, (req, res, next) => {
+router.get('/:id/achievements', authenticate, async (req, res, next) => {
     try {
         const { id } = req.params;
         const db = getDb();
 
-        const achievements = db.prepare(`
+        const achievements = await db.prepare(`
             SELECT a.*, ua.progress, ua.unlocked_at
             FROM achievements a
             LEFT JOIN user_achievements ua ON ua.achievement_id = a.id AND ua.user_id = ?
@@ -215,13 +215,13 @@ router.get('/:id/achievements', authenticate, (req, res, next) => {
  * Get user game history.
  * GET /api/users/:id/game-history
  */
-router.get('/:id/game-history', authenticate, (req, res, next) => {
+router.get('/:id/game-history', authenticate, async (req, res, next) => {
     try {
         const { id } = req.params;
         const { limit = 20, offset = 0 } = req.query;
         const db = getDb();
 
-        const games = db.prepare(`
+        const games = await db.prepare(`
             SELECT id, game_type, game_mode, score, xp_earned, correct_count,
                    total_questions, average_time_ms, started_at, completed_at,
                    difficulty_level, region_filter
@@ -231,7 +231,7 @@ router.get('/:id/game-history', authenticate, (req, res, next) => {
             LIMIT ? OFFSET ?
         `).all(id, parseInt(limit), parseInt(offset));
 
-        const total = db.prepare(
+        const total = await db.prepare(
             'SELECT COUNT(*) as count FROM game_sessions WHERE user_id = ?'
         ).get(id);
 
@@ -246,7 +246,7 @@ router.get('/:id/game-history', authenticate, (req, res, next) => {
  * GET /api/users/:id/export
  * Returns a JSON file with all user data for GDPR compliance.
  */
-router.get('/:id/export', authenticate, (req, res, next) => {
+router.get('/:id/export', authenticate, async (req, res, next) => {
     try {
         const { id } = req.params;
 
@@ -260,7 +260,7 @@ router.get('/:id/export', authenticate, (req, res, next) => {
         const db = getDb();
 
         // Get user profile
-        const user = db.prepare(`
+        const user = await db.prepare(`
             SELECT id, username, avatar_url, overall_xp, overall_level,
                    current_streak, longest_streak, created_at, updated_at
             FROM users WHERE id = ?
@@ -273,14 +273,14 @@ router.get('/:id/export', authenticate, (req, res, next) => {
         }
 
         // Get category stats
-        const stats = db.prepare(`
+        const stats = await db.prepare(`
             SELECT category, xp, level, games_played, total_correct, total_questions,
                    high_score, average_time_ms
             FROM user_category_stats WHERE user_id = ?
         `).all(id);
 
         // Get achievements
-        const achievements = db.prepare(`
+        const achievements = await db.prepare(`
             SELECT a.id, a.name, a.description, a.icon, a.xp_reward,
                    ua.progress, ua.unlocked_at
             FROM achievements a
@@ -289,7 +289,7 @@ router.get('/:id/export', authenticate, (req, res, next) => {
         `).all(id);
 
         // Get game history
-        const games = db.prepare(`
+        const games = await db.prepare(`
             SELECT id, game_type, game_mode, score, xp_earned, correct_count,
                    total_questions, average_time_ms, started_at, completed_at,
                    difficulty_level, region_filter
@@ -300,14 +300,14 @@ router.get('/:id/export', authenticate, (req, res, next) => {
 
         // Get friends - use two separate queries to avoid complex JOIN issues with SQL.js
         const userId = parseInt(id);
-        const friendsAsUser = db.prepare(`
+        const friendsAsUser = await db.prepare(`
             SELECT u.id, u.username, u.overall_level, f.created_at as friends_since
             FROM friendships f
             JOIN users u ON u.id = f.friend_id
             WHERE f.user_id = ? AND f.status = 'accepted'
         `).all(userId);
 
-        const friendsAsFriend = db.prepare(`
+        const friendsAsFriend = await db.prepare(`
             SELECT u.id, u.username, u.overall_level, f.created_at as friends_since
             FROM friendships f
             JOIN users u ON u.id = f.user_id
@@ -322,7 +322,7 @@ router.get('/:id/export', authenticate, (req, res, next) => {
         const friends = Array.from(friendsMap.values());
 
         // Get notifications
-        const notifications = db.prepare(`
+        const notifications = await db.prepare(`
             SELECT id, type, title, body, is_read, created_at
             FROM notifications
             WHERE user_id = ?
@@ -330,7 +330,7 @@ router.get('/:id/export', authenticate, (req, res, next) => {
         `).all(id);
 
         // Get daily challenge progress
-        const dailyChallenges = db.prepare(`
+        const dailyChallenges = await db.prepare(`
             SELECT id, challenge_type, target_value, current_value,
                    is_completed, xp_reward, date
             FROM daily_challenges
@@ -465,7 +465,7 @@ router.post('/:id/avatar', authenticate, async (req, res, next) => {
                 // Update user's avatar_url in database
                 const avatarUrl = `/avatars/${avatarFileName}`;
                 const db = getDb();
-                db.prepare('UPDATE users SET avatar_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+                await db.prepare('UPDATE users SET avatar_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
                     .run(avatarUrl, id);
 
                 res.json({

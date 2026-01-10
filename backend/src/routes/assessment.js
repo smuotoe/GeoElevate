@@ -117,7 +117,7 @@ const ASSESSMENT_QUESTIONS = {
  * Get assessment questions.
  * GET /api/assessment/questions
  */
-router.get('/questions', authenticate, (req, res, next) => {
+router.get('/questions', authenticate, async (req, res, next) => {
     try {
         // Combine questions from all categories
         const questions = [];
@@ -143,7 +143,7 @@ router.get('/questions', authenticate, (req, res, next) => {
  * Submit assessment answers and calculate initial skill levels.
  * POST /api/assessment/submit
  */
-router.post('/submit', authenticate, (req, res, next) => {
+router.post('/submit', authenticate, async (req, res, next) => {
     try {
         const { answers } = req.body;
         const db = getDb();
@@ -198,7 +198,7 @@ router.post('/submit', authenticate, (req, res, next) => {
             categoryScores[category].initialLevel = initialLevel;
 
             // Update user's category stats
-            db.prepare(`
+            await db.prepare(`
                 UPDATE user_category_stats
                 SET level = ?, xp = ?
                 WHERE user_id = ? AND category = ?
@@ -206,7 +206,7 @@ router.post('/submit', authenticate, (req, res, next) => {
         }
 
         // Mark assessment as completed
-        db.prepare(`
+        await db.prepare(`
             UPDATE users
             SET settings_json = json_set(COALESCE(settings_json, '{}'), '$.assessmentCompleted', true),
                 updated_at = CURRENT_TIMESTAMP
@@ -230,12 +230,12 @@ router.post('/submit', authenticate, (req, res, next) => {
  * Skip assessment.
  * POST /api/assessment/skip
  */
-router.post('/skip', authenticate, (req, res, next) => {
+router.post('/skip', authenticate, async (req, res, next) => {
     try {
         const db = getDb();
 
         // Mark assessment as skipped
-        db.prepare(`
+        await db.prepare(`
             UPDATE users
             SET settings_json = json_set(COALESCE(settings_json, '{}'), '$.assessmentSkipped', true),
                 updated_at = CURRENT_TIMESTAMP
@@ -252,11 +252,11 @@ router.post('/skip', authenticate, (req, res, next) => {
  * Check assessment status.
  * GET /api/assessment/status
  */
-router.get('/status', authenticate, (req, res, next) => {
+router.get('/status', authenticate, async (req, res, next) => {
     try {
         const db = getDb();
 
-        const user = db.prepare(`
+        const user = await db.prepare(`
             SELECT settings_json FROM users WHERE id = ?
         `).get(req.userId);
 

@@ -9,11 +9,11 @@ const router = Router();
  * Get user settings.
  * GET /api/settings
  */
-router.get('/', authenticate, (req, res, next) => {
+router.get('/', authenticate, async (req, res, next) => {
     try {
         const db = getDb();
 
-        const user = db.prepare(
+        const user = await db.prepare(
             'SELECT settings_json FROM users WHERE id = ?'
         ).get(req.userId);
 
@@ -53,14 +53,14 @@ router.get('/', authenticate, (req, res, next) => {
  * If provided, the update will only succeed if the record hasn't been
  * modified since that timestamp.
  */
-router.patch('/', authenticate, (req, res, next) => {
+router.patch('/', authenticate, async (req, res, next) => {
     try {
         const db = getDb();
         const { expected_updated_at, ...settingsUpdate } = req.body;
 
         // Check for concurrent modification if expected_updated_at is provided
         if (expected_updated_at) {
-            const current = db.prepare(
+            const current = await db.prepare(
                 'SELECT updated_at FROM users WHERE id = ?'
             ).get(req.userId);
 
@@ -75,20 +75,20 @@ router.patch('/', authenticate, (req, res, next) => {
             }
         }
 
-        const user = db.prepare(
+        const user = await db.prepare(
             'SELECT settings_json, updated_at FROM users WHERE id = ?'
         ).get(req.userId);
 
         const currentSettings = JSON.parse(user.settings_json || '{}');
         const newSettings = { ...currentSettings, ...settingsUpdate };
 
-        db.prepare(`
+        await db.prepare(`
             UPDATE users
             SET settings_json = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
         `).run(JSON.stringify(newSettings), req.userId);
 
-        const updatedUser = db.prepare(
+        const updatedUser = await db.prepare(
             'SELECT updated_at FROM users WHERE id = ?'
         ).get(req.userId);
 
@@ -133,7 +133,7 @@ router.post('/change-password', authenticate, async (req, res, next) => {
         const db = getDb();
 
         // Get user's current password hash
-        const user = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.userId);
+        const user = await db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.userId);
 
         if (!user) {
             return res.status(404).json({
@@ -152,7 +152,7 @@ router.post('/change-password', authenticate, async (req, res, next) => {
         // Hash new password and update
         const newPasswordHash = await bcrypt.hash(newPassword, 10);
 
-        db.prepare(`
+        await db.prepare(`
             UPDATE users
             SET password_hash = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?

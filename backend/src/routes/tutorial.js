@@ -8,11 +8,11 @@ const router = Router();
  * Get tutorial status.
  * GET /api/tutorial/status
  */
-router.get('/status', authenticate, (req, res, next) => {
+router.get('/status', authenticate, async (req, res, next) => {
     try {
         const db = getDb();
 
-        const user = db.prepare(`
+        const user = await db.prepare(`
             SELECT settings_json FROM users WHERE id = ?
         `).get(req.userId);
 
@@ -32,11 +32,11 @@ router.get('/status', authenticate, (req, res, next) => {
  * Mark tutorial as completed.
  * POST /api/tutorial/complete
  */
-router.post('/complete', authenticate, (req, res, next) => {
+router.post('/complete', authenticate, async (req, res, next) => {
     try {
         const db = getDb();
 
-        db.prepare(`
+        await db.prepare(`
             UPDATE users
             SET settings_json = json_set(COALESCE(settings_json, '{}'), '$.tutorialCompleted', true),
                 updated_at = CURRENT_TIMESTAMP
@@ -53,11 +53,11 @@ router.post('/complete', authenticate, (req, res, next) => {
  * Mark tutorial as skipped.
  * POST /api/tutorial/skip
  */
-router.post('/skip', authenticate, (req, res, next) => {
+router.post('/skip', authenticate, async (req, res, next) => {
     try {
         const db = getDb();
 
-        db.prepare(`
+        await db.prepare(`
             UPDATE users
             SET settings_json = json_set(COALESCE(settings_json, '{}'), '$.tutorialSkipped', true),
                 updated_at = CURRENT_TIMESTAMP

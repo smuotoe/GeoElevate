@@ -9,11 +9,11 @@ const router = Router();
  * Get pending friend requests received by the user.
  * GET /api/friends/requests
  */
-router.get('/requests', authenticate, (req, res, next) => {
+router.get('/requests', authenticate, async (req, res, next) => {
     try {
         const db = getDb();
 
-        const requests = db.prepare(`
+        const requests = await db.prepare(`
             SELECT f.id, f.user_id, f.created_at,
                    u.username, u.avatar_url, u.overall_xp, u.overall_level
             FROM friendships f
@@ -32,11 +32,11 @@ router.get('/requests', authenticate, (req, res, next) => {
  * Get user's friends list.
  * GET /api/friends
  */
-router.get('/', authenticate, (req, res, next) => {
+router.get('/', authenticate, async (req, res, next) => {
     try {
         const db = getDb();
 
-        const friends = db.prepare(`
+        const friends = await db.prepare(`
             SELECT u.id, u.username, u.avatar_url, u.overall_xp, u.overall_level,
                    u.current_streak, u.last_login_at, u.last_active_at, f.accepted_at
             FROM friendships f
@@ -70,7 +70,7 @@ router.get('/', authenticate, (req, res, next) => {
  * Send friend request.
  * POST /api/friends/request
  */
-router.post('/request', authenticate, (req, res, next) => {
+router.post('/request', authenticate, async (req, res, next) => {
     try {
         const { username } = req.body;
 
@@ -83,7 +83,7 @@ router.post('/request', authenticate, (req, res, next) => {
         const db = getDb();
 
         // Find user by username (case-insensitive)
-        const friendUser = db.prepare(
+        const friendUser = await db.prepare(
             'SELECT id FROM users WHERE LOWER(username) = LOWER(?)'
         ).get(username);
 
@@ -100,7 +100,7 @@ router.post('/request', authenticate, (req, res, next) => {
         }
 
         // Check if friendship already exists
-        const existing = db.prepare(`
+        const existing = await db.prepare(`
             SELECT * FROM friendships
             WHERE (user_id = ? AND friend_id = ?)
             OR (user_id = ? AND friend_id = ?)
@@ -113,13 +113,13 @@ router.post('/request', authenticate, (req, res, next) => {
         }
 
         // Create friend request
-        db.prepare(`
+        await db.prepare(`
             INSERT INTO friendships (user_id, friend_id, status)
             VALUES (?, ?, 'pending')
         `).run(req.userId, friendUser.id);
 
         // Create notification for the friend
-        db.prepare(`
+        await db.prepare(`
             INSERT INTO notifications (user_id, type, title, body, data_json)
             VALUES (?, 'friend_request', 'New Friend Request', ?, ?)
         `).run(
@@ -138,13 +138,13 @@ router.post('/request', authenticate, (req, res, next) => {
  * Accept friend request.
  * POST /api/friends/request/:id/accept
  */
-router.post('/request/:id/accept', authenticate, (req, res, next) => {
+router.post('/request/:id/accept', authenticate, async (req, res, next) => {
     try {
         const { id } = req.params;
         const db = getDb();
 
         // Find pending request where current user is the friend_id
-        const request = db.prepare(`
+        const request = await db.prepare(`
             SELECT * FROM friendships
             WHERE id = ? AND friend_id = ? AND status = 'pending'
         `).get(id, req.userId);
@@ -156,14 +156,14 @@ router.post('/request/:id/accept', authenticate, (req, res, next) => {
         }
 
         // Accept the request
-        db.prepare(`
+        await db.prepare(`
             UPDATE friendships
             SET status = 'accepted', accepted_at = CURRENT_TIMESTAMP
             WHERE id = ?
         `).run(id);
 
         // Notify the requester
-        db.prepare(`
+        await db.prepare(`
             INSERT INTO notifications (user_id, type, title, body, data_json)
             VALUES (?, 'friend_accepted', 'Friend Request Accepted', ?, ?)
         `).run(
@@ -182,12 +182,12 @@ router.post('/request/:id/accept', authenticate, (req, res, next) => {
  * Decline friend request.
  * POST /api/friends/request/:id/decline
  */
-router.post('/request/:id/decline', authenticate, (req, res, next) => {
+router.post('/request/:id/decline', authenticate, async (req, res, next) => {
     try {
         const { id } = req.params;
         const db = getDb();
 
-        const result = db.prepare(`
+        const result = await db.prepare(`
             DELETE FROM friendships
             WHERE id = ? AND friend_id = ? AND status = 'pending'
         `).run(id, req.userId);
@@ -208,12 +208,12 @@ router.post('/request/:id/decline', authenticate, (req, res, next) => {
  * Remove friend.
  * DELETE /api/friends/:id
  */
-router.delete('/:id', authenticate, (req, res, next) => {
+router.delete('/:id', authenticate, async (req, res, next) => {
     try {
         const { id } = req.params;
         const db = getDb();
 
-        const result = db.prepare(`
+        const result = await db.prepare(`
             DELETE FROM friendships
             WHERE ((user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?))
             AND status = 'accepted'
@@ -235,27 +235,29 @@ router.delete('/:id', authenticate, (req, res, next) => {
  * Get activity feed.
  * GET /api/friends/activity-feed
  */
-router.get('/activity-feed', authenticate, (req, res, next) => {
+router.get('/activity-feed', authenticate, async (req, res, next) => {
     try {
         const { limit = 20, offset = 0 } = req.query;
         const db = getDb();
 
         // Get friend IDs
-        const friendIds = db.prepare(`
+        const friendRows = await db.prepare(`
             SELECT CASE
                 WHEN user_id = ? THEN friend_id
                 ELSE user_id
             END as friend_id
             FROM friendships
             WHERE (user_id = ? OR friend_id = ?) AND status = 'accepted'
-        `).all(req.userId, req.userId, req.userId).map(f => f.friend_id);
+        `).all(req.userId, req.userId, req.userId);
+
+        const friendIds = friendRows.map(f => f.friend_id);
 
         if (friendIds.length === 0) {
             return res.json({ activities: [] });
         }
 
         const placeholders = friendIds.map(() => '?').join(',');
-        const activities = db.prepare(`
+        const activities = await db.prepare(`
             SELECT af.*, u.username, u.avatar_url
             FROM activity_feed af
             JOIN users u ON u.id = af.user_id
