@@ -6,7 +6,7 @@ import { gameAnswerRateLimit } from '../middleware/rateLimit.js';
 const router = Router();
 
 // Daily XP cap per game type (encourages variety)
-const DAILY_XP_CAP = 500;
+const DAILY_XP_CAP = 2000;
 
 /**
  * Get remaining XP that can be earned today for a game type.
