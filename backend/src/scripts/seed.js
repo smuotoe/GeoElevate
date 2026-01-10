@@ -446,6 +446,87 @@ async function seedCustomTrivia(db) {
 }
 
 /**
+ * Seed achievements table with game achievements.
+ *
+ * @param {object} db - Database wrapper
+ * @returns {Promise<number>} Number of achievements seeded
+ */
+async function seedAchievements(db) {
+    const achievements = [
+        // Flags achievements
+        { name: 'Flag Novice', description: 'Answer 10 flag questions correctly', icon: 'flag', category: 'flags', requirement_type: 'correct_count', requirement_value: 10, xp_reward: 50 },
+        { name: 'Flag Explorer', description: 'Answer 50 flag questions correctly', icon: 'flag', category: 'flags', requirement_type: 'correct_count', requirement_value: 50, xp_reward: 100 },
+        { name: 'Flag Expert', description: 'Answer 100 flag questions correctly', icon: 'flag', category: 'flags', requirement_type: 'correct_count', requirement_value: 100, xp_reward: 200 },
+        { name: 'Flag Master', description: 'Answer 500 flag questions correctly', icon: 'flag', category: 'flags', requirement_type: 'correct_count', requirement_value: 500, xp_reward: 500 },
+        { name: 'Vexillologist', description: 'Answer 1000 flag questions correctly', icon: 'flag', category: 'flags', requirement_type: 'correct_count', requirement_value: 1000, xp_reward: 1000 },
+
+        // Capitals achievements
+        { name: 'Capital Beginner', description: 'Answer 10 capital questions correctly', icon: 'building', category: 'capitals', requirement_type: 'correct_count', requirement_value: 10, xp_reward: 50 },
+        { name: 'Capital Explorer', description: 'Answer 50 capital questions correctly', icon: 'building', category: 'capitals', requirement_type: 'correct_count', requirement_value: 50, xp_reward: 100 },
+        { name: 'Capital Expert', description: 'Answer 100 capital questions correctly', icon: 'building', category: 'capitals', requirement_type: 'correct_count', requirement_value: 100, xp_reward: 200 },
+        { name: 'Capital Master', description: 'Answer 500 capital questions correctly', icon: 'building', category: 'capitals', requirement_type: 'correct_count', requirement_value: 500, xp_reward: 500 },
+        { name: 'World Traveler', description: 'Answer 1000 capital questions correctly', icon: 'building', category: 'capitals', requirement_type: 'correct_count', requirement_value: 1000, xp_reward: 1000 },
+
+        // Maps achievements
+        { name: 'Map Reader', description: 'Play 5 map games', icon: 'map', category: 'maps', requirement_type: 'games_played', requirement_value: 5, xp_reward: 50 },
+        { name: 'Cartographer', description: 'Play 25 map games', icon: 'map', category: 'maps', requirement_type: 'games_played', requirement_value: 25, xp_reward: 100 },
+        { name: 'Geography Buff', description: 'Play 50 map games', icon: 'map', category: 'maps', requirement_type: 'games_played', requirement_value: 50, xp_reward: 200 },
+        { name: 'Map Master', description: 'Play 100 map games', icon: 'map', category: 'maps', requirement_type: 'games_played', requirement_value: 100, xp_reward: 500 },
+
+        // Languages achievements
+        { name: 'Linguist Beginner', description: 'Answer 10 language questions correctly', icon: 'languages', category: 'languages', requirement_type: 'correct_count', requirement_value: 10, xp_reward: 50 },
+        { name: 'Polyglot Explorer', description: 'Answer 50 language questions correctly', icon: 'languages', category: 'languages', requirement_type: 'correct_count', requirement_value: 50, xp_reward: 100 },
+        { name: 'Language Expert', description: 'Answer 100 language questions correctly', icon: 'languages', category: 'languages', requirement_type: 'correct_count', requirement_value: 100, xp_reward: 200 },
+        { name: 'Language Master', description: 'Answer 500 language questions correctly', icon: 'languages', category: 'languages', requirement_type: 'correct_count', requirement_value: 500, xp_reward: 500 },
+
+        // Trivia achievements
+        { name: 'Trivia Rookie', description: 'Answer 10 trivia questions correctly', icon: 'lightbulb', category: 'trivia', requirement_type: 'correct_count', requirement_value: 10, xp_reward: 50 },
+        { name: 'Trivia Enthusiast', description: 'Answer 50 trivia questions correctly', icon: 'lightbulb', category: 'trivia', requirement_type: 'correct_count', requirement_value: 50, xp_reward: 100 },
+        { name: 'Trivia Expert', description: 'Answer 100 trivia questions correctly', icon: 'lightbulb', category: 'trivia', requirement_type: 'correct_count', requirement_value: 100, xp_reward: 200 },
+        { name: 'Trivia Master', description: 'Answer 500 trivia questions correctly', icon: 'lightbulb', category: 'trivia', requirement_type: 'correct_count', requirement_value: 500, xp_reward: 500 },
+
+        // General achievements
+        { name: 'First Steps', description: 'Complete your first game', icon: 'star', category: 'general', requirement_type: 'games_played', requirement_value: 1, xp_reward: 25 },
+        { name: 'Getting Started', description: 'Complete 10 games', icon: 'star', category: 'general', requirement_type: 'games_played', requirement_value: 10, xp_reward: 100 },
+        { name: 'Dedicated Learner', description: 'Complete 50 games', icon: 'star', category: 'general', requirement_type: 'games_played', requirement_value: 50, xp_reward: 250 },
+        { name: 'Geography Champion', description: 'Complete 100 games', icon: 'trophy', category: 'general', requirement_type: 'games_played', requirement_value: 100, xp_reward: 500 },
+        { name: 'Perfect Score', description: 'Get 10/10 in any game', icon: 'crown', category: 'general', requirement_type: 'perfect_game', requirement_value: 1, xp_reward: 100 },
+        { name: 'Perfectionist', description: 'Get 10 perfect scores', icon: 'crown', category: 'general', requirement_type: 'perfect_game', requirement_value: 10, xp_reward: 500 }
+    ];
+
+    let insertedCount = 0;
+
+    for (const achievement of achievements) {
+        try {
+            const existing = await db.prepare(
+                'SELECT id FROM achievements WHERE name = ?'
+            ).get(achievement.name);
+
+            if (!existing) {
+                await db.prepare(`
+                    INSERT INTO achievements (name, description, icon, category, requirement_type, requirement_value, xp_reward)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                `).run(
+                    achievement.name,
+                    achievement.description,
+                    achievement.icon,
+                    achievement.category,
+                    achievement.requirement_type,
+                    achievement.requirement_value,
+                    achievement.xp_reward
+                );
+                insertedCount++;
+            }
+        } catch (error) {
+            console.error(`Error inserting achievement ${achievement.name}: ${error.message}`);
+        }
+    }
+
+    console.log(`Seeded ${insertedCount} achievements`);
+    return insertedCount;
+}
+
+/**
  * Main seeding function.
  */
 async function main() {
@@ -465,12 +546,16 @@ async function main() {
         const triviaCount = await seedTriviaData(db);
         const customTriviaCount = await seedCustomTrivia(db);
 
+        console.log('\n--- Seeding Achievements ---');
+        const achievementCount = await seedAchievements(db);
+
         console.log('\n========================================');
         console.log('Seeding Complete!');
         console.log('========================================');
         console.log(`Countries: ${countryCount}`);
         console.log(`Languages: ${languageCount}`);
         console.log(`Trivia Facts: ${triviaCount + customTriviaCount}`);
+        console.log(`Achievements: ${achievementCount}`);
         console.log('========================================\n');
 
     } catch (error) {
