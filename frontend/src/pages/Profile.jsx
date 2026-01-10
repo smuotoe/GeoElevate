@@ -456,32 +456,55 @@ function Profile() {
                 style={{
                     padding: '16px',
                     backgroundColor: 'var(--surface)',
-                    borderRadius: '8px',
-                    opacity: isUnlocked ? 1 : 0.6,
-                    border: isUnlocked ? '2px solid var(--primary)' : '2px solid transparent',
+                    borderRadius: '12px',
+                    border: isUnlocked ? '2px solid var(--primary)' : '1px solid var(--border, rgba(255,255,255,0.1))',
                     cursor: 'pointer',
                     textAlign: 'left',
-                    width: '100%'
+                    width: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                    transition: 'transform 0.2s, box-shadow 0.2s',
+                    position: 'relative',
+                    overflow: 'hidden'
                 }}
             >
+                {/* Unlocked badge */}
+                {isUnlocked && (
+                    <div style={{
+                        position: 'absolute',
+                        top: '8px',
+                        right: '8px',
+                        backgroundColor: 'var(--primary)',
+                        color: 'white',
+                        fontSize: '10px',
+                        fontWeight: '600',
+                        padding: '2px 8px',
+                        borderRadius: '10px'
+                    }}>
+                        UNLOCKED
+                    </div>
+                )}
+
+                {/* Top section: Icon + Info */}
                 <div style={{
                     display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    marginBottom: '8px'
+                    alignItems: 'flex-start',
+                    gap: '14px'
                 }}>
+                    {/* Icon */}
                     <div style={{
-                        width: '48px',
-                        height: '48px',
+                        width: '56px',
+                        height: '56px',
                         borderRadius: '50%',
-                        backgroundColor: isUnlocked ? 'var(--primary)' : 'var(--text-secondary)',
+                        backgroundColor: isUnlocked ? 'var(--primary)' : 'rgba(255,255,255,0.1)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        fontSize: '24px',
-                        filter: isUnlocked ? 'none' : 'grayscale(100%)',
+                        flexShrink: 0,
                         overflow: 'hidden',
-                        position: 'relative'
+                        position: 'relative',
+                        border: isUnlocked ? '2px solid var(--primary)' : '2px solid rgba(255,255,255,0.2)'
                     }}>
                         {achievement.image_url ? (
                             <img
@@ -491,13 +514,16 @@ function Profile() {
                                     width: '100%',
                                     height: '100%',
                                     objectFit: 'cover',
-                                    filter: isUnlocked ? 'none' : 'grayscale(100%) brightness(0.7)'
+                                    filter: isUnlocked ? 'none' : 'grayscale(100%) brightness(0.5)'
                                 }}
                             />
                         ) : (
-                            <IconComponent size={24} color="white" />
+                            <IconComponent
+                                size={28}
+                                color={isUnlocked ? 'white' : 'rgba(255,255,255,0.5)'}
+                            />
                         )}
-                        {!isUnlocked && achievement.image_url && (
+                        {!isUnlocked && (
                             <div style={{
                                 position: 'absolute',
                                 top: 0,
@@ -507,61 +533,100 @@ function Profile() {
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                backgroundColor: 'rgba(0,0,0,0.4)'
+                                backgroundColor: 'rgba(0,0,0,0.5)'
                             }}>
-                                <Lock size={18} color="white" />
+                                <Lock size={20} color="rgba(255,255,255,0.7)" />
                             </div>
                         )}
                     </div>
-                    <div style={{ flex: 1 }}>
+
+                    {/* Text content */}
+                    <div style={{ flex: 1, minWidth: 0, paddingRight: isUnlocked ? '60px' : 0 }}>
                         <div style={{
-                            color: 'var(--text-primary)',
-                            fontWeight: '600'
+                            color: isUnlocked ? 'var(--text-primary)' : 'var(--text-secondary)',
+                            fontWeight: '600',
+                            fontSize: '15px',
+                            marginBottom: '4px'
                         }}>
                             {achievement.name}
                         </div>
                         <div style={{
                             color: 'var(--text-secondary)',
-                            fontSize: '12px'
+                            fontSize: '13px',
+                            lineHeight: '1.4',
+                            opacity: isUnlocked ? 1 : 0.8
                         }}>
                             {achievement.description}
                         </div>
                     </div>
                 </div>
+
+                {/* Progress section */}
                 {!isUnlocked && (
-                    <div>
+                    <div style={{ width: '100%' }}>
                         <div style={{
-                            height: '4px',
-                            backgroundColor: 'var(--text-secondary)',
-                            borderRadius: '2px',
-                            overflow: 'hidden',
-                            marginBottom: '4px'
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: '6px'
+                        }}>
+                            <span style={{
+                                fontSize: '12px',
+                                color: 'var(--text-secondary)',
+                                fontWeight: '500'
+                            }}>
+                                Progress
+                            </span>
+                            <span style={{
+                                fontSize: '12px',
+                                color: 'var(--primary)',
+                                fontWeight: '600'
+                            }}>
+                                {progress} / {achievement.requirement_value}
+                            </span>
+                        </div>
+                        <div style={{
+                            height: '8px',
+                            backgroundColor: 'rgba(255,255,255,0.1)',
+                            borderRadius: '4px',
+                            overflow: 'hidden'
                         }}>
                             <div style={{
                                 height: '100%',
                                 width: `${progressPercent}%`,
                                 backgroundColor: 'var(--primary)',
-                                borderRadius: '2px'
+                                borderRadius: '4px',
+                                transition: 'width 0.3s ease'
                             }} />
                         </div>
-                        <div style={{
-                            fontSize: '11px',
-                            color: 'var(--text-secondary)',
-                            textAlign: 'right'
-                        }}>
-                            {progress}/{achievement.requirement_value}
-                        </div>
                     </div>
                 )}
-                {isUnlocked && (
-                    <div style={{
-                        fontSize: '11px',
-                        color: 'var(--primary)',
-                        textAlign: 'right'
+
+                {/* XP reward */}
+                <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    paddingTop: isUnlocked ? 0 : '4px',
+                    borderTop: isUnlocked ? 'none' : '1px solid rgba(255,255,255,0.05)'
+                }}>
+                    <span style={{
+                        fontSize: '12px',
+                        color: 'var(--text-secondary)'
+                    }}>
+                        {achievement.category}
+                    </span>
+                    <span style={{
+                        fontSize: '13px',
+                        color: isUnlocked ? 'var(--primary)' : 'var(--text-secondary)',
+                        fontWeight: '600',
+                        backgroundColor: isUnlocked ? 'rgba(var(--primary-rgb, 59, 130, 246), 0.15)' : 'rgba(255,255,255,0.05)',
+                        padding: '4px 10px',
+                        borderRadius: '12px'
                     }}>
                         +{achievement.xp_reward} XP
-                    </div>
-                )}
+                    </span>
+                </div>
             </button>
         )
     }
@@ -783,23 +848,75 @@ function Profile() {
         }
 
         const unlockedCount = achievementList.filter(a => a.unlocked_at !== null).length
+        const overallPercent = achievementList.length > 0
+            ? Math.round((unlockedCount / achievementList.length) * 100)
+            : 0
 
         return (
             <div>
+                {/* Summary header */}
                 <div style={{
-                    marginBottom: '16px',
-                    color: 'var(--text-secondary)'
+                    marginBottom: '20px',
+                    padding: '16px',
+                    backgroundColor: 'rgba(255,255,255,0.03)',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(255,255,255,0.08)'
                 }}>
-                    {unlockedCount}/{achievementList.length} unlocked
+                    <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: '10px'
+                    }}>
+                        <span style={{
+                            color: 'var(--text-primary)',
+                            fontWeight: '600',
+                            fontSize: '16px'
+                        }}>
+                            {unlockedCount} / {achievementList.length} Unlocked
+                        </span>
+                        <span style={{
+                            color: 'var(--primary)',
+                            fontWeight: '600',
+                            fontSize: '14px'
+                        }}>
+                            {overallPercent}%
+                        </span>
+                    </div>
+                    <div style={{
+                        height: '10px',
+                        backgroundColor: 'rgba(255,255,255,0.1)',
+                        borderRadius: '5px',
+                        overflow: 'hidden'
+                    }}>
+                        <div style={{
+                            height: '100%',
+                            width: `${overallPercent}%`,
+                            backgroundColor: 'var(--primary)',
+                            borderRadius: '5px',
+                            transition: 'width 0.3s ease'
+                        }} />
+                    </div>
                 </div>
+
+                {/* Achievements grid */}
                 <div style={{
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-                    gap: '12px'
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+                    gap: '16px'
                 }}>
                     {achievementList.map(renderAchievementBadge)}
                 </div>
-                <Link to="/achievements" className="btn btn-secondary mt-md">
+
+                <Link
+                    to="/achievements"
+                    className="btn btn-secondary"
+                    style={{
+                        marginTop: '20px',
+                        display: 'inline-block',
+                        textDecoration: 'none'
+                    }}
+                >
                     View All Achievements
                 </Link>
             </div>
