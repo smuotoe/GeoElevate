@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">GeoElevate</string>
+    <string name="title_activity_main">GeoElevate</string>
+    <string name="package_name">com.geoelevate.app</string>
+    <string name="custom_url_scheme">com.geoelevate.app</string>
+</resources>

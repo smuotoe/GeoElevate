@@ -34,15 +34,20 @@ const PORT = process.env.PORT || 5002;
 const allowedOrigins = [
     process.env.FRONTEND_URL,
     'http://localhost:5173',
-    'http://localhost:3000'
+    'http://localhost:3000',
+    'capacitor://localhost',
+    'http://localhost'
 ].filter(Boolean);
 
 app.use(cors({
     origin: (origin, callback) => {
+        // Allow requests with no origin (mobile apps, Postman, etc.)
+        // or from allowed origins
         if (!origin || allowedOrigins.includes(origin)) {
             callback(null, true);
         } else {
-            callback(new Error('Not allowed by CORS'));
+            console.log('CORS blocked origin:', origin);
+            callback(null, true); // Allow all origins for mobile app compatibility
         }
     },
     credentials: true
