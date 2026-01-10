@@ -4,6 +4,16 @@ import { useAuth } from '../context/AuthContext'
 import { api } from '../utils/api'
 import Modal from '../components/Modal'
 import AvatarSelector from '../components/AvatarSelector'
+import { Flag, Landmark, Globe, Languages, Lightbulb, Trophy, Lock } from 'lucide-react'
+
+const CATEGORY_ICONS = {
+    flags: Flag,
+    capitals: Landmark,
+    maps: Globe,
+    languages: Languages,
+    trivia: Lightbulb,
+    general: Trophy
+}
 
 // Avatar upload configuration
 const MAX_FILE_SIZE = 2 * 1024 * 1024 // 2MB
@@ -437,6 +447,7 @@ function Profile() {
         const progressPercent = achievement.requirement_value > 0
             ? Math.min((progress / achievement.requirement_value) * 100, 100)
             : 0
+        const IconComponent = CATEGORY_ICONS[achievement.category] || Trophy
 
         return (
             <button
@@ -468,9 +479,39 @@ function Profile() {
                         alignItems: 'center',
                         justifyContent: 'center',
                         fontSize: '24px',
-                        filter: isUnlocked ? 'none' : 'grayscale(100%)'
+                        filter: isUnlocked ? 'none' : 'grayscale(100%)',
+                        overflow: 'hidden',
+                        position: 'relative'
                     }}>
-                        {achievement.icon || '?'}
+                        {achievement.image_url ? (
+                            <img
+                                src={achievement.image_url}
+                                alt={achievement.name}
+                                style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    objectFit: 'cover',
+                                    filter: isUnlocked ? 'none' : 'grayscale(100%) brightness(0.7)'
+                                }}
+                            />
+                        ) : (
+                            <IconComponent size={24} color="white" />
+                        )}
+                        {!isUnlocked && achievement.image_url && (
+                            <div style={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                backgroundColor: 'rgba(0,0,0,0.4)'
+                            }}>
+                                <Lock size={18} color="white" />
+                            </div>
+                        )}
                     </div>
                     <div style={{ flex: 1 }}>
                         <div style={{
@@ -538,6 +579,7 @@ function Profile() {
         const progressPercent = selectedAchievement.requirement_value > 0
             ? Math.min((progress / selectedAchievement.requirement_value) * 100, 100)
             : 0
+        const ModalIconComponent = CATEGORY_ICONS[selectedAchievement.category] || Trophy
 
         return (
             <Modal
@@ -556,9 +598,39 @@ function Profile() {
                         justifyContent: 'center',
                         fontSize: '40px',
                         margin: '0 auto 16px',
-                        filter: isUnlocked ? 'none' : 'grayscale(100%)'
+                        filter: isUnlocked ? 'none' : 'grayscale(100%)',
+                        overflow: 'hidden',
+                        position: 'relative'
                     }}>
-                        {selectedAchievement.icon || '?'}
+                        {selectedAchievement.image_url ? (
+                            <img
+                                src={selectedAchievement.image_url}
+                                alt={selectedAchievement.name}
+                                style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    objectFit: 'cover',
+                                    filter: isUnlocked ? 'none' : 'grayscale(100%) brightness(0.7)'
+                                }}
+                            />
+                        ) : (
+                            <ModalIconComponent size={40} color="white" />
+                        )}
+                        {!isUnlocked && selectedAchievement.image_url && (
+                            <div style={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                backgroundColor: 'rgba(0,0,0,0.4)'
+                            }}>
+                                <Lock size={24} color="white" />
+                            </div>
+                        )}
                     </div>
 
                     <p style={{
