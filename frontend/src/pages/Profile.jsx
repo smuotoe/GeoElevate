@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { api } from '../utils/api'
 import Modal from '../components/Modal'
 import AvatarSelector from '../components/AvatarSelector'
-import { Flag, Landmark, Globe, Languages, Lightbulb, Trophy, Lock } from 'lucide-react'
+import { Flag, Landmark, Globe, Languages, Lightbulb, Trophy, Lock, Pencil, Camera } from 'lucide-react'
 
 const CATEGORY_ICONS = {
     flags: Flag,
@@ -893,7 +893,7 @@ function Profile() {
                             }}
                             title="Change avatar"
                         >
-                            {avatarUploading ? '...' : '📷'}
+                            {avatarUploading ? '...' : <Camera size={14} />}
                         </button>
                     )}
                     {isOwnProfile && (
@@ -927,7 +927,7 @@ function Profile() {
                             title="Edit profile"
                             aria-label="Edit profile"
                         >
-                            ✏️
+                            <Pencil size={16} />
                         </button>
                     )}
                 </div>
