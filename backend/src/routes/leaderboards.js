@@ -96,7 +96,7 @@ router.get('/global', optionalAuthenticate, (req, res, next) => {
             SELECT id, username, avatar_url, overall_xp, overall_level, current_streak,
                    ROW_NUMBER() OVER (ORDER BY overall_xp DESC) as rank
             FROM users
-            WHERE is_guest = 0
+            WHERE is_guest = false
             ORDER BY overall_xp DESC
             LIMIT ? OFFSET ?
         `).all(parseInt(limit), parseInt(offset));
@@ -116,7 +116,7 @@ router.get('/global', optionalAuthenticate, (req, res, next) => {
             const userRankData = db.prepare(`
                 SELECT rank, overall_xp FROM (
                     SELECT id, overall_xp, ROW_NUMBER() OVER (ORDER BY overall_xp DESC) as rank
-                    FROM users WHERE is_guest = 0
+                    FROM users WHERE is_guest = false
                 )
                 WHERE id = ?
             `).get(req.userId);
@@ -157,7 +157,7 @@ router.get('/game/:gameType', optionalAuthenticate, (req, res, next) => {
                    ROW_NUMBER() OVER (ORDER BY ucs.xp DESC) as rank
             FROM user_category_stats ucs
             JOIN users u ON u.id = ucs.user_id
-            WHERE ucs.category = ? AND u.is_guest = 0
+            WHERE ucs.category = ? AND u.is_guest = false
             ORDER BY ucs.xp DESC
             LIMIT ? OFFSET ?
         `).all(gameType, parseInt(limit), parseInt(offset));
@@ -203,7 +203,7 @@ router.get('/weekly', optionalAuthenticate, (req, res, next) => {
                 LEFT JOIN game_sessions gs ON gs.user_id = u.id
                     AND gs.completed_at >= ?
                     AND gs.game_type = ?
-                WHERE u.is_guest = 0
+                WHERE u.is_guest = false
                 GROUP BY u.id
                 ORDER BY weekly_xp DESC
                 LIMIT ? OFFSET ?
@@ -224,7 +224,7 @@ router.get('/weekly', optionalAuthenticate, (req, res, next) => {
                         LEFT JOIN game_sessions gs ON gs.user_id = u.id
                             AND gs.completed_at >= ?
                             AND gs.game_type = ?
-                        WHERE u.is_guest = 0
+                        WHERE u.is_guest = false
                         GROUP BY u.id
                     )
                     WHERE weekly_xp > ?
@@ -240,7 +240,7 @@ router.get('/weekly', optionalAuthenticate, (req, res, next) => {
                 FROM users u
                 LEFT JOIN game_sessions gs ON gs.user_id = u.id
                     AND gs.completed_at >= ?
-                WHERE u.is_guest = 0
+                WHERE u.is_guest = false
                 GROUP BY u.id
                 ORDER BY weekly_xp DESC
                 LIMIT ? OFFSET ?
@@ -260,7 +260,7 @@ router.get('/weekly', optionalAuthenticate, (req, res, next) => {
                         FROM users u
                         LEFT JOIN game_sessions gs ON gs.user_id = u.id
                             AND gs.completed_at >= ?
-                        WHERE u.is_guest = 0
+                        WHERE u.is_guest = false
                         GROUP BY u.id
                     )
                     WHERE weekly_xp > ?
