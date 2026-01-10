@@ -6,6 +6,7 @@ import { useAudio } from '../context/AudioContext'
 import { api } from '../utils/api'
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges'
 import UnsavedChangesDialog from '../components/UnsavedChangesDialog'
+import { X } from 'lucide-react'
 
 /**
  * Settings page component.
@@ -719,7 +720,7 @@ function Settings() {
                                 }}
                                 aria-label="Close"
                             >
-                                &#10005;
+                                <X size={20} />
                             </button>
                         </div>
                         <form onSubmit={handleDeleteAccount}>

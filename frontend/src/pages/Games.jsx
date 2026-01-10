@@ -1,13 +1,22 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { Flag, Landmark, Globe, Languages, Lightbulb, Swords, X } from 'lucide-react'
+
+const GAME_ICONS = {
+    flags: Flag,
+    capitals: Landmark,
+    maps: Globe,
+    languages: Languages,
+    trivia: Lightbulb
+}
 
 const GAME_TYPES = [
-    { id: 'flags', name: 'Flags', icon: '&#127988;', description: 'Identify countries by their flags' },
-    { id: 'capitals', name: 'Capitals', icon: '&#127963;', description: 'Match countries with capitals' },
-    { id: 'maps', name: 'Maps', icon: '&#127758;', description: 'Find countries on the map' },
-    { id: 'languages', name: 'Languages', icon: '&#128172;', description: 'Learn which languages are spoken where' },
-    { id: 'trivia', name: 'Trivia', icon: '&#128161;', description: 'Geography facts and knowledge' },
+    { id: 'flags', name: 'Flags', description: 'Identify countries by their flags' },
+    { id: 'capitals', name: 'Capitals', description: 'Match countries with capitals' },
+    { id: 'maps', name: 'Maps', description: 'Find countries on the map' },
+    { id: 'languages', name: 'Languages', description: 'Learn which languages are spoken where' },
+    { id: 'trivia', name: 'Trivia', description: 'Geography facts and knowledge' },
 ]
 
 const FILTER_TABS = ['all', 'flags', 'capitals', 'maps', 'languages', 'trivia']
@@ -100,7 +109,7 @@ function Games() {
                                 onClick={() => setShowLoginPrompt(false)}
                                 aria-label="Close"
                             >
-                                &#10005;
+                                <X size={20} />
                             </button>
                         </div>
                         <div className="modal-body">
@@ -141,11 +150,10 @@ function Games() {
                             }}
                         >
                             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                <span
-                                    className="game-icon"
-                                    style={{ fontSize: '32px' }}
-                                    dangerouslySetInnerHTML={{ __html: game.icon }}
-                                />
+                                {(() => {
+                                    const IconComponent = GAME_ICONS[game.id]
+                                    return <IconComponent size={32} className="game-icon" />
+                                })()}
                                 <div>
                                     <h3 style={{ color: 'var(--text-primary)' }}>{game.name}</h3>
                                     <p className="text-secondary">{game.description}</p>
@@ -166,9 +174,7 @@ function Games() {
                         style={{ display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer' }}
                     >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                            <span className="game-icon" style={{ fontSize: '32px' }}>
-                                &#9876;
-                            </span>
+                            <Swords size={32} className="game-icon" />
                             <div>
                                 <h3 style={{ color: 'var(--text-primary)' }}>Challenge Friends</h3>
                                 <p className="text-secondary">

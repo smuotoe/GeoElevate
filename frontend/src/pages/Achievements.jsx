@@ -3,18 +3,24 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../utils/api'
 import styles from './Achievements.module.css'
+import {
+    Flag, Landmark, Globe, Languages, Earth, Star, Zap, Flame,
+    Users, Trophy, Lock, ChevronLeft, Award, Target, Crown,
+    Lightbulb, Medal, MapPin
+} from 'lucide-react'
 
 const CATEGORY_ICONS = {
-    flags: '🏳️',
-    capitals: '🏛️',
-    maps: '🗺️',
-    languages: '🗣️',
-    general: '🌍',
-    accuracy: '⭐',
-    speed: '⚡',
-    streak: '🔥',
-    social: '👥',
-    multiplayer: '🏆'
+    flags: Flag,
+    capitals: Landmark,
+    maps: Globe,
+    languages: Languages,
+    general: Earth,
+    accuracy: Target,
+    speed: Zap,
+    streak: Flame,
+    social: Users,
+    multiplayer: Trophy,
+    trivia: Lightbulb
 }
 
 const CATEGORY_NAMES = {
@@ -93,7 +99,7 @@ function Achievements() {
         <div className="page">
             <div className="page-header">
                 <button className="btn btn-secondary" onClick={() => navigate(-1)}>
-                    Back
+                    <ChevronLeft size={20} />
                 </button>
                 <h1 className="page-title">Achievements</h1>
                 <div style={{ width: 60 }} />
@@ -101,7 +107,7 @@ function Achievements() {
 
             {/* Summary Card */}
             <div className={styles.summaryCard}>
-                <div className={styles.summaryIcon}>🏆</div>
+                <div className={styles.summaryIcon}><Trophy size={32} /></div>
                 <div className={styles.summaryText}>
                     <span className={styles.summaryCount}>
                         {summary.unlocked} / {summary.total}
@@ -124,15 +130,18 @@ function Achievements() {
                 >
                     All
                 </button>
-                {categories.map(cat => (
-                    <button
-                        key={cat}
-                        className={`${styles.categoryBtn} ${selectedCategory === cat ? styles.active : ''}`}
-                        onClick={() => setSelectedCategory(cat)}
-                    >
-                        {CATEGORY_ICONS[cat] || '📌'} {CATEGORY_NAMES[cat] || cat}
-                    </button>
-                ))}
+                {categories.map(cat => {
+                    const IconComponent = CATEGORY_ICONS[cat] || MapPin
+                    return (
+                        <button
+                            key={cat}
+                            className={`${styles.categoryBtn} ${selectedCategory === cat ? styles.active : ''}`}
+                            onClick={() => setSelectedCategory(cat)}
+                        >
+                            <IconComponent size={16} /> {CATEGORY_NAMES[cat] || cat}
+                        </button>
+                    )
+                })}
             </div>
 
             {loading ? (
@@ -152,13 +161,17 @@ function Achievements() {
                 </div>
             ) : (
                 <div className={styles.achievementsList}>
-                    {Object.entries(groupedAchievements).map(([category, catAchievements]) => (
+                    {Object.entries(groupedAchievements).map(([category, catAchievements]) => {
+                        const CategoryIcon = CATEGORY_ICONS[category] || MapPin
+                        return (
                         <div key={category} className={styles.categorySection}>
                             <h2 className={styles.categoryTitle}>
-                                {CATEGORY_ICONS[category] || '📌'} {CATEGORY_NAMES[category] || category}
+                                <CategoryIcon size={24} /> {CATEGORY_NAMES[category] || category}
                             </h2>
                             <div className={styles.achievementsGrid}>
-                                {catAchievements.map(achievement => (
+                                {catAchievements.map(achievement => {
+                                    const AchievementIcon = CATEGORY_ICONS[achievement.category] || Trophy
+                                    return (
                                     <div
                                         key={achievement.id}
                                         className={`${styles.achievementCard} ${isUnlocked(achievement) ? styles.unlocked : styles.locked}`}
@@ -166,10 +179,10 @@ function Achievements() {
                                         <div className={styles.achievementIcon}>
                                             {isUnlocked(achievement) ? (
                                                 <span className={styles.unlockedIcon}>
-                                                    {CATEGORY_ICONS[achievement.category] || '🏆'}
+                                                    <AchievementIcon size={28} />
                                                 </span>
                                             ) : (
-                                                <span className={styles.lockedIcon}>🔒</span>
+                                                <span className={styles.lockedIcon}><Lock size={28} /></span>
                                             )}
                                         </div>
                                         <div className={styles.achievementInfo}>
@@ -202,10 +215,12 @@ function Achievements() {
                                             </div>
                                         )}
                                     </div>
-                                ))}
+                                    )
+                                })}
                             </div>
                         </div>
-                    ))}
+                        )
+                    })}
                 </div>
             )}
         </div>

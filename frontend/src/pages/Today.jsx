@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../utils/api'
+import { Flag, Landmark, Globe, Lightbulb, Flame, PartyPopper, ChevronRight } from 'lucide-react'
 
 const STREAK_MILESTONES = [7, 14, 30, 60, 90, 180, 365]
 
@@ -314,14 +315,15 @@ function Today() {
                     >
                         <div
                             style={{
-                                fontSize: '64px',
                                 marginBottom: '16px',
-                                animation: 'bounce 0.6s ease infinite'
+                                animation: 'bounce 0.6s ease infinite',
+                                display: 'flex',
+                                justifyContent: 'center'
                             }}
                             role="img"
                             aria-label="celebration"
                         >
-                            &#127881;
+                            <PartyPopper size={64} />
                         </div>
                         <h2
                             id="streak-celebration-title"
@@ -345,7 +347,7 @@ function Today() {
                                 marginBottom: '24px'
                             }}
                         >
-                            <span style={{ fontSize: '32px' }}>&#128293;</span>
+                            <Flame size={32} />
                             <span
                                 style={{
                                     fontSize: '2.5rem',
@@ -385,7 +387,7 @@ function Today() {
                 <h1 className="page-title">Today</h1>
                 {user && (
                     <div className="streak-badge">
-                        <span role="img" aria-label="streak">&#128293;</span>
+                        <Flame size={18} />
                         {user.current_streak || 0}
                     </div>
                 )}
@@ -415,19 +417,19 @@ function Today() {
                 <h3 className="mb-sm">Quick Start</h3>
                 <div className="quick-start-grid">
                     <Link to="/play/flags" className="card quick-start-card">
-                        <span style={{ fontSize: '24px' }}>&#127988;</span>
+                        <Flag size={24} />
                         <span>Flags</span>
                     </Link>
                     <Link to="/play/capitals" className="card quick-start-card">
-                        <span style={{ fontSize: '24px' }}>&#127963;</span>
+                        <Landmark size={24} />
                         <span>Capitals</span>
                     </Link>
                     <Link to="/play/maps" className="card quick-start-card">
-                        <span style={{ fontSize: '24px' }}>&#127758;</span>
+                        <Globe size={24} />
                         <span>Maps</span>
                     </Link>
                     <Link to="/play/trivia" className="card quick-start-card">
-                        <span style={{ fontSize: '24px' }}>&#128161;</span>
+                        <Lightbulb size={24} />
                         <span>Trivia</span>
                     </Link>
                 </div>
@@ -568,7 +570,7 @@ function Today() {
                                                 {rec.reason}
                                             </div>
                                         </div>
-                                        <span style={{ color: 'var(--primary)', fontSize: '1.2rem' }}>&#8250;</span>
+                                        <ChevronRight size={20} style={{ color: 'var(--primary)' }} />
                                     </Link>
                                 ))}
                             </div>

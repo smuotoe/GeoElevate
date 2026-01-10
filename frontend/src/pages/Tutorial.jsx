@@ -2,6 +2,21 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../utils/api'
+import { Globe, Gamepad2, Zap, TrendingUp, Flame, Trophy, Users, Rocket } from 'lucide-react'
+
+/**
+ * Tutorial step icons mapping.
+ */
+const TUTORIAL_ICONS = {
+    welcome: Globe,
+    games: Gamepad2,
+    scoring: Zap,
+    progress: TrendingUp,
+    challenges: Flame,
+    leaderboards: Trophy,
+    friends: Users,
+    ready: Rocket
+}
 
 /**
  * Tutorial steps configuration.
@@ -12,56 +27,48 @@ const TUTORIAL_STEPS = [
         id: 'welcome',
         title: 'Welcome to GeoElevate!',
         description: 'Learn geography through fun, engaging quizzes. Let us show you around!',
-        icon: '🌍',
         highlight: null
     },
     {
         id: 'games',
         title: 'Play Games',
         description: 'Test your knowledge with 5 game types: Flags, Capitals, Maps, Languages, and Trivia. Each game helps you learn different geography facts.',
-        icon: '🎮',
         highlight: 'games'
     },
     {
         id: 'scoring',
         title: 'Score Points',
         description: 'Answer quickly for bonus points! Build streaks by answering correctly in a row to multiply your score.',
-        icon: '⚡',
         highlight: 'scoring'
     },
     {
         id: 'progress',
         title: 'Track Progress',
         description: 'Your skills improve as you play. Watch your level grow in each category and unlock achievements along the way.',
-        icon: '📈',
         highlight: 'progress'
     },
     {
         id: 'challenges',
         title: 'Daily Challenges',
         description: 'Complete daily challenges to earn bonus XP. Keep your streak alive by playing every day!',
-        icon: '🔥',
         highlight: 'challenges'
     },
     {
         id: 'leaderboards',
         title: 'Climb the Leaderboards',
         description: 'Compete with players worldwide! See how you rank globally, weekly, or among your friends.',
-        icon: '🏆',
         highlight: 'leaderboards'
     },
     {
         id: 'friends',
         title: 'Play with Friends',
         description: 'Add friends and challenge them to multiplayer matches. See who knows more geography!',
-        icon: '👥',
         highlight: 'friends'
     },
     {
         id: 'ready',
         title: "You're Ready!",
         description: "That's all you need to know. Start playing and become a geography master!",
-        icon: '🚀',
         highlight: null
     }
 ]
@@ -179,11 +186,15 @@ function Tutorial() {
                 {/* Step content */}
                 <div style={{ marginBottom: '32px' }}>
                     <div style={{
-                        fontSize: '4rem',
                         marginBottom: '16px',
-                        animation: 'bounce 0.5s ease'
+                        animation: 'bounce 0.5s ease',
+                        display: 'flex',
+                        justifyContent: 'center'
                     }}>
-                        {step.icon}
+                        {(() => {
+                            const IconComponent = TUTORIAL_ICONS[step.id]
+                            return <IconComponent size={64} strokeWidth={1.5} />
+                        })()}
                     </div>
                     <h1 style={{
                         fontSize: '1.75rem',

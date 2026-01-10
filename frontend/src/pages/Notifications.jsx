@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../utils/api'
+import { Trophy, Users, Swords, Award, Flame, MessageCircle, Bell } from 'lucide-react'
 
 /**
  * Available notification types for filtering.
@@ -16,6 +17,19 @@ const NOTIFICATION_TYPES = [
     { value: 'streak_reminder', label: 'Streak Reminders' },
     { value: 'friend_activity', label: 'Friend Activity' }
 ]
+
+/**
+ * Notification type icons mapping.
+ */
+const NOTIFICATION_ICONS = {
+    challenge_complete: Trophy,
+    friend_request: Users,
+    friend_accepted: Users,
+    match_invite: Swords,
+    achievement: Award,
+    streak_reminder: Flame,
+    friend_activity: MessageCircle
+}
 
 /**
  * Format a date for display.
@@ -36,21 +50,14 @@ function formatDate(dateString) {
 }
 
 /**
- * Get icon for notification type.
+ * Get icon component for notification type.
  *
  * @param {string} type - Notification type
- * @returns {string} Emoji icon
+ * @returns {React.Component} Icon component
  */
-function getNotificationIcon(type) {
-    const icons = {
-        challenge_complete: '&#127942;',
-        friend_request: '&#128101;',
-        match_invite: '&#9876;',
-        achievement: '&#127941;',
-        streak_reminder: '&#128293;',
-        friend_activity: '&#128172;'
-    }
-    return icons[type] || '&#128276;'
+function NotificationIcon({ type }) {
+    const IconComponent = NOTIFICATION_ICONS[type] || Bell
+    return <IconComponent size={24} />
 }
 
 /**
@@ -388,10 +395,9 @@ function Notifications() {
                                 alignItems: 'flex-start'
                             }}>
                                 <div style={{ display: 'flex', gap: '12px', flex: 1 }}>
-                                    <span
-                                        style={{ fontSize: '1.5rem' }}
-                                        dangerouslySetInnerHTML={{ __html: getNotificationIcon(notification.type) }}
-                                    />
+                                    <span style={{ display: 'flex', alignItems: 'center' }}>
+                                        <NotificationIcon type={notification.type} />
+                                    </span>
                                     <div style={{ flex: 1 }}>
                                         <div style={{
                                             fontWeight: notification.is_read ? 400 : 600,
